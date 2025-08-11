@@ -30,6 +30,9 @@ type GitRepository interface {
 	// PeelToCommit returns the commit hash for the given commit-ish.
 	PeelToCommit(ctx context.Context, ref string) (git.Hash, error)
 
+	// CommitSubject returns the subject line of a commit.
+	CommitSubject(ctx context.Context, commitish string) (string, error)
+
 	// LocalBranches returns an iterator over local branches
 	LocalBranches(ctx context.Context, opts *git.LocalBranchesOptions) iter.Seq2[git.LocalBranch, error]
 
@@ -48,6 +51,7 @@ type GitRepository interface {
 
 	RenameBranch(context.Context, git.RenameBranchRequest) error
 	DeleteBranch(context.Context, string, git.BranchDeleteOptions) error
+	CreateBranch(context.Context, git.CreateBranchRequest) error
 	HashAt(context.Context, string, string) (git.Hash, error)
 }
 
@@ -56,6 +60,16 @@ type GitWorktree interface {
 	// CurrentBranch returns the name of the current branch.
 	CurrentBranch(ctx context.Context) (string, error)
 	Rebase(context.Context, git.RebaseRequest) error
+	Merge(context.Context, git.MergeRequest) error
+	Checkout(context.Context, string) error
+	
+	// State checking methods
+	RebaseState(context.Context) (*git.RebaseState, error)
+	MergeState(context.Context) (*git.MergeState, error)
+	
+	// Continue/abort methods
+	MergeContinue(context.Context, *git.MergeContinueOptions) error
+	MergeAbort(context.Context) error
 }
 
 var (

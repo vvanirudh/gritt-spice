@@ -7,11 +7,14 @@ import (
 	"go.abhg.dev/gs/internal/git"
 	"go.abhg.dev/gs/internal/handler/restack"
 	"go.abhg.dev/gs/internal/silog"
+	"go.abhg.dev/gs/internal/spice"
 	"go.abhg.dev/gs/internal/spice/state"
 	"go.abhg.dev/gs/internal/text"
 )
 
-type repoRestackCmd struct{}
+type repoRestackCmd struct {
+	Method string `config:"restack.method" default:"rebase" help:"Method to use for restacking: 'rebase' or 'merge'" enum:"rebase,merge"`
+}
 
 func (*repoRestackCmd) Help() string {
 	return text.Dedent(`
@@ -20,7 +23,7 @@ func (*repoRestackCmd) Help() string {
 	`)
 }
 
-func (*repoRestackCmd) Run(
+func (cmd *repoRestackCmd) Run(
 	ctx context.Context,
 	log *silog.Logger,
 	wt *git.Worktree,
@@ -30,6 +33,17 @@ func (*repoRestackCmd) Run(
 	currentBranch, err := wt.CurrentBranch(ctx)
 	if err != nil {
 		return fmt.Errorf("get current branch: %w", err)
+	}
+
+	// Parse the restack method
+	method, err := spice.ParseRestackMethod(cmd.Method)
+	if err != nil {
+		return fmt.Errorf("invalid restack method: %w", err)
+	}
+
+	// Update the handler with the configured method
+	if h, ok := handler.(*restack.Handler); ok {
+		handler = h.WithRestackMethod(method)
 	}
 
 	count, err := handler.Restack(ctx, &restack.Request{

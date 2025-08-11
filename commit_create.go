@@ -8,6 +8,7 @@ import (
 	"go.abhg.dev/gs/internal/git"
 	"go.abhg.dev/gs/internal/handler/restack"
 	"go.abhg.dev/gs/internal/silog"
+	"go.abhg.dev/gs/internal/spice"
 	"go.abhg.dev/gs/internal/text"
 )
 
@@ -17,12 +18,16 @@ type commitCreateCmd struct {
 	Fixup      string `help:"Create a fixup commit."`
 	Message    string `short:"m" help:"Use the given message as the commit message."`
 	NoVerify   bool   `help:"Bypass pre-commit and commit-msg hooks."`
+	Method     string `config:"restack.method" default:"rebase" help:"Method to use for restacking: 'rebase' or 'merge'" enum:"rebase,merge"`
 }
 
 func (*commitCreateCmd) Help() string {
 	return text.Dedent(`
 		Staged changes are committed to the current branch.
 		Branches upstack are restacked if necessary.
+		By default, uses rebase to ensure a linear history.
+		Set 'spice.restack.method=merge' to use merge commits instead,
+		which preserves individual commit history.
 		Use this as a shortcut for 'git commit'
 		followed by 'gs upstack restack'.
 	`)
@@ -59,6 +64,17 @@ func (cmd *commitCreateCmd) Run(
 			return nil
 		}
 		return fmt.Errorf("get current branch: %w", err)
+	}
+
+	// Parse the restack method from configuration
+	method, err := spice.ParseRestackMethod(cmd.Method)
+	if err != nil {
+		return fmt.Errorf("invalid restack method: %w", err)
+	}
+
+	// Configure the handler with the restack method if it's a restack.Handler
+	if h, ok := restackHandler.(*restack.Handler); ok {
+		restackHandler = h.WithRestackMethod(method)
 	}
 
 	return restackHandler.RestackUpstack(ctx, currentBranch, &restack.UpstackOptions{

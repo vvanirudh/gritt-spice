@@ -151,7 +151,7 @@ was not initialized with a remote.
 ### gs repo restack
 
 ```
-gs repo (r) restack (r)
+gs repo (r) restack (r) [flags]
 ```
 
 <span class="mdx-badge"><span class="mdx-badge__icon">:material-tag:{ title="Released in version" }</span><span class="mdx-badge__text">[v0.16.0](/changelog.md#v0.16.0)</span>
@@ -160,6 +160,12 @@ Restack all tracked branches
 
 All tracked branches in the repository are rebased on top of their
 respective bases in dependency order, ensuring a linear history.
+
+**Flags**
+
+* `--method="rebase"` ([:material-wrench:{ .middle title="spice.restack.method" }](/cli/config.md#spicerestackmethod)): Method to use for restacking: 'rebase' or 'merge'
+
+**Configuration**: [spice.restack.method](/cli/config.md#spicerestackmethod)
 
 ## Log
 
@@ -251,14 +257,20 @@ gs stack (s) restack (r) [flags]
 
 Restack a stack
 
-All branches in the current stack are rebased on top of their
-respective bases, ensuring a linear history.
+All branches in the current stack are restacked on top of their
+respective bases.
+By default, uses rebase to ensure a linear history.
+Set 'spice.restack.method=merge' to use merge commits instead,
+which preserves individual commit history.
 
-Use --branch to rebase the stack of a different branch.
+Use --branch to restack the stack of a different branch.
 
 **Flags**
 
 * `--branch=NAME`: Branch to restack the stack of
+* `--method="rebase"` ([:material-wrench:{ .middle title="spice.restack.method" }](/cli/config.md#spicerestackmethod)): Method to use for restacking: 'rebase' or 'merge'
+
+**Configuration**: [spice.restack.method](/cli/config.md#spicerestackmethod)
 
 ### gs stack edit
 
@@ -364,11 +376,13 @@ gs upstack (us) restack (r) [flags]
 Restack a branch and its upstack
 
 The current branch and all branches above it
-are rebased on top of their respective bases,
-ensuring a linear history.
+are restacked on top of their respective bases.
+By default, uses rebase to ensure a linear history.
+Set 'spice.restack.method=merge' to use merge commits instead,
+which preserves individual commit history.
 Use --branch to start at a different branch.
 Use --skip-start to skip the starting branch,
-but still rebase all branches above it.
+but still restack all branches above it.
 
 The target branch defaults to the current branch.
 If run from the trunk branch,
@@ -378,6 +392,9 @@ all managed branches will be restacked.
 
 * `--skip-start`: Do not restack the starting branch
 * `--branch=NAME`: Branch to restack the upstack of
+* `--method="rebase"` ([:material-wrench:{ .middle title="spice.restack.method" }](/cli/config.md#spicerestackmethod)): Method to use for restacking: 'rebase' or 'merge'
+
+**Configuration**: [spice.restack.method](/cli/config.md#spicerestackmethod)
 
 ### gs upstack onto
 
@@ -812,13 +829,18 @@ gs branch (b) restack (r) [flags]
 
 Restack a branch
 
-The current branch will be rebased onto its base,
-ensuring a linear history.
+The current branch will be restacked onto its base.
+By default, uses rebase to ensure a linear history.
+Set 'spice.restack.method=merge' to use merge commits instead,
+which preserves individual commit history.
 Use --branch to target a different branch.
 
 **Flags**
 
 * `--branch=NAME`: Branch to restack
+* `--method="rebase"` ([:material-wrench:{ .middle title="spice.restack.method" }](/cli/config.md#spicerestackmethod)): Method to use for restacking: 'rebase' or 'merge'
+
+**Configuration**: [spice.restack.method](/cli/config.md#spicerestackmethod)
 
 ### gs branch onto
 
@@ -921,6 +943,9 @@ Create a new commit
 
 Staged changes are committed to the current branch.
 Branches upstack are restacked if necessary.
+By default, uses rebase to ensure a linear history.
+Set 'spice.restack.method=merge' to use merge commits instead,
+which preserves individual commit history.
 Use this as a shortcut for 'git commit'
 followed by 'gs upstack restack'.
 
@@ -931,6 +956,9 @@ followed by 'gs upstack restack'.
 * `--fixup=STRING`: Create a fixup commit.
 * `-m`, `--message=STRING`: Use the given message as the commit message.
 * `--no-verify`: Bypass pre-commit and commit-msg hooks.
+* `--method="rebase"` ([:material-wrench:{ .middle title="spice.restack.method" }](/cli/config.md#spicerestackmethod)): Method to use for restacking: 'rebase' or 'merge'
+
+**Configuration**: [spice.restack.method](/cli/config.md#spicerestackmethod)
 
 ### gs commit amend
 
@@ -1019,6 +1047,58 @@ going back to the state before the rebase.
 
 The command can be used in place of 'git rebase --abort'
 even if a git-spice operation is not currently in progress.
+
+## gs continue
+
+```
+gs continue (cont) [flags]
+```
+
+Continue an interrupted operation
+
+Continues an ongoing git-spice operation interrupted by
+a conflict during rebase or merge after all conflicts have been resolved.
+
+This command automatically detects whether the interruption was caused by
+a rebase or merge operation and continues appropriately.
+
+Use the --no-edit flag to continue without opening an editor.
+Make --no-edit the default by setting 'spice.continue.edit' to false
+and use --edit to override it.
+
+**Flags**
+
+* `--[no-]edit` ([:material-wrench:{ .middle title="spice.continue.edit" }](/cli/config.md#spicecontinueedit)): Whether to open an editor to edit the commit message.
+
+**Configuration**: [spice.continue.edit](/cli/config.md#spicecontinueedit)
+
+## gs abort
+
+```
+gs abort [flags]
+```
+
+Abort an interrupted operation
+
+Aborts an ongoing git-spice operation that was interrupted by
+a conflict during rebase or merge.
+
+This command automatically detects whether the interruption was caused by
+a rebase or merge operation and aborts appropriately.
+
+Any queued continuations from the interrupted operation will be cleared.
+
+## gs version
+
+```
+gs version [flags]
+```
+
+Print version information and quit
+
+**Flags**
+
+* `--short`: Print only the version number.
 
 ## Navigation
 
@@ -1122,16 +1202,4 @@ Move to the trunk branch
 * `--detach`: Detach HEAD after checking out
 
 **Configuration**: [spice.checkout.verbose](/cli/config.md#spicecheckoutverbose)
-
-## gs version
-
-```
-gs version [flags]
-```
-
-Print version information and quit
-
-**Flags**
-
-* `--short`: Print only the version number.
 

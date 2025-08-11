@@ -290,6 +290,10 @@ type mainCmd struct {
 
 	Rebase rebaseCmd `cmd:"" aliases:"rb" group:"Rebase"`
 
+	// Continuation commands
+	Continue continueCmd `cmd:"" aliases:"cont" help:"Continue an interrupted operation"`
+	Abort    abortCmd    `cmd:"" help:"Abort an interrupted operation"`
+
 	// Navigation
 	Up     upCmd     `cmd:"" aliases:"u" group:"Navigation" help:"Move up one branch"`
 	Down   downCmd   `cmd:"" aliases:"d" group:"Navigation" help:"Move down one branch"`

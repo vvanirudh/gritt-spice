@@ -6,6 +6,7 @@ import (
 
 	"go.abhg.dev/gs/internal/git"
 	"go.abhg.dev/gs/internal/handler/restack"
+	"go.abhg.dev/gs/internal/spice"
 	"go.abhg.dev/gs/internal/text"
 )
 
@@ -13,16 +14,19 @@ type upstackRestackCmd struct {
 	restack.UpstackOptions
 
 	Branch string `help:"Branch to restack the upstack of" placeholder:"NAME" predictor:"trackedBranches"`
+	Method string `config:"restack.method" default:"rebase" help:"Method to use for restacking: 'rebase' or 'merge'" enum:"rebase,merge"`
 }
 
 func (*upstackRestackCmd) Help() string {
 	return text.Dedent(`
 		The current branch and all branches above it
-		are rebased on top of their respective bases,
-		ensuring a linear history.
+		are restacked on top of their respective bases.
+		By default, uses rebase to ensure a linear history.
+		Set 'spice.restack.method=merge' to use merge commits instead,
+		which preserves individual commit history.
 		Use --branch to start at a different branch.
 		Use --skip-start to skip the starting branch,
-		but still rebase all branches above it.
+		but still restack all branches above it.
 
 		The target branch defaults to the current branch.
 		If run from the trunk branch,
@@ -50,5 +54,16 @@ func (cmd *upstackRestackCmd) AfterApply(ctx context.Context, wt *git.Worktree) 
 }
 
 func (cmd *upstackRestackCmd) Run(ctx context.Context, handler RestackHandler) error {
+	// Parse the restack method from configuration
+	method, err := spice.ParseRestackMethod(cmd.Method)
+	if err != nil {
+		return fmt.Errorf("invalid restack method: %w", err)
+	}
+
+	// Configure the handler with the restack method if it's a restack.Handler
+	if h, ok := handler.(*restack.Handler); ok {
+		handler = h.WithRestackMethod(method)
+	}
+
 	return handler.RestackUpstack(ctx, cmd.Branch, &cmd.UpstackOptions)
 }

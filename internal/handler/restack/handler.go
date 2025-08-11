@@ -36,15 +36,29 @@ type Store interface {
 type Service interface {
 	BranchGraph(ctx context.Context, opts *spice.BranchGraphOptions) (*spice.BranchGraph, error)
 	Restack(ctx context.Context, name string) (*spice.RestackResponse, error)
+	RestackWithOptions(ctx context.Context, name string, opts spice.RestackOptions) (*spice.RestackResponse, error)
 	RebaseRescue(ctx context.Context, req spice.RebaseRescueRequest) error
+	RestackRescue(ctx context.Context, req spice.RestackRescueRequest) error
 }
 
 // Handler implements various restack operations.
 type Handler struct {
-	Log      *silog.Logger // required
-	Worktree GitWorktree   // required
-	Store    Store         // required
-	Service  Service       // required
+	Log           *silog.Logger          // required
+	Worktree      GitWorktree            // required
+	Store         Store                  // required
+	Service       Service                // required
+	RestackMethod spice.RestackMethod    // optional, defaults to rebase
+}
+
+// WithRestackMethod returns a copy of the handler with the specified restack method.
+func (h *Handler) WithRestackMethod(method spice.RestackMethod) *Handler {
+	return &Handler{
+		Log:           h.Log,
+		Worktree:      h.Worktree,
+		Store:         h.Store,
+		Service:       h.Service,
+		RestackMethod: method,
+	}
 }
 
 // Scope specifies which branches are affected
@@ -194,18 +208,19 @@ loop:
 			continue loop // skip restacking trunk branch
 		}
 
-		res, err := h.Service.Restack(ctx, branch)
+		opts := spice.RestackOptions{Method: h.RestackMethod}
+		res, err := h.Service.RestackWithOptions(ctx, branch, opts)
 		if err != nil {
-			var rebaseErr *git.RebaseInterruptError
+			var restackErr *spice.RestackInterruptError
 			switch {
-			case errors.As(err, &rebaseErr):
-				// If the rebase is interrupted by a conflict,
+			case errors.As(err, &restackErr):
+				// If the restack is interrupted by a conflict (merge or rebase),
 				// we'll resume by re-running this command.
-				return 0, h.Service.RebaseRescue(ctx, spice.RebaseRescueRequest{
-					Err:     rebaseErr,
+				return 0, h.Service.RestackRescue(ctx, spice.RestackRescueRequest{
+					Err:     restackErr,
 					Command: req.ContinueCommand,
 					Branch:  req.Branch,
-					Message: fmt.Sprintf("interrupted: restack branch %q", branch),
+					Message: fmt.Sprintf("interrupted: %s branch %q", restackErr.Method, branch),
 				})
 
 			case errors.Is(err, state.ErrNotExist):
