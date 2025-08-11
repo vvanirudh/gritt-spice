@@ -208,19 +208,54 @@ loop:
 			continue loop // skip restacking trunk branch
 		}
 
-		opts := spice.RestackOptions{Method: h.RestackMethod}
-		res, err := h.Service.RestackWithOptions(ctx, branch, opts)
+		var res *spice.RestackResponse
+		var err error
+		if h.RestackMethod == spice.RestackMethodMerge {
+			opts := spice.RestackOptions{Method: h.RestackMethod}
+			res, err = h.Service.RestackWithOptions(ctx, branch, opts)
+		} else {
+			res, err = h.Service.Restack(ctx, branch)
+		}
 		if err != nil {
 			var restackErr *spice.RestackInterruptError
+			var rebaseErr *git.RebaseInterruptError
 			switch {
 			case errors.As(err, &restackErr):
 				// If the restack is interrupted by a conflict (merge or rebase),
 				// we'll resume by re-running this command.
-				return 0, h.Service.RestackRescue(ctx, spice.RestackRescueRequest{
-					Err:     restackErr,
+				if restackErr.Method == spice.RestackMethodMerge {
+					return 0, h.Service.RestackRescue(ctx, spice.RestackRescueRequest{
+						Err:     restackErr,
+						Command: req.ContinueCommand,
+						Branch:  req.Branch,
+						Message: fmt.Sprintf("interrupted: %s branch %q", restackErr.Method, branch),
+					})
+				} else {
+					// For rebase method, use the legacy RebaseRescue
+					if errors.As(restackErr.Err, &rebaseErr) {
+						return 0, h.Service.RebaseRescue(ctx, spice.RebaseRescueRequest{
+							Err:     rebaseErr,
+							Command: req.ContinueCommand,
+							Branch:  req.Branch,
+							Message: fmt.Sprintf("interrupted: rebase branch %q", branch),
+						})
+					}
+					// Fallback to RestackRescue if not a RebaseInterruptError
+					return 0, h.Service.RestackRescue(ctx, spice.RestackRescueRequest{
+						Err:     restackErr,
+						Command: req.ContinueCommand,
+						Branch:  req.Branch,
+						Message: fmt.Sprintf("interrupted: %s branch %q", restackErr.Method, branch),
+					})
+				}
+
+			case errors.As(err, &rebaseErr):
+				// Handle direct RebaseInterruptError (from legacy code)
+				return 0, h.Service.RebaseRescue(ctx, spice.RebaseRescueRequest{
+					Err:     rebaseErr,
 					Command: req.ContinueCommand,
 					Branch:  req.Branch,
-					Message: fmt.Sprintf("interrupted: %s branch %q", restackErr.Method, branch),
+					Message: fmt.Sprintf("interrupted: rebase branch %q", branch),
 				})
 
 			case errors.Is(err, state.ErrNotExist):
