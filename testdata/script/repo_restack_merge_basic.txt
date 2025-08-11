@@ -1,0 +1,55 @@
+# Basic repo restack functionality with merge method - conflict-free scenario
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+git add feat1.txt
+gs branch create feat1 -m 'feat1 commit'
+git add feat2.txt
+gs branch create feat2 -m 'feat2 commit'
+git add feat3.txt
+gs branch create feat3 -m 'feat3 commit'
+
+# Create a new commit on trunk to make branches need restacking
+gs branch checkout main
+git commit --allow-empty -m 'New trunk commit'
+
+# Now restack all branches using merge method
+gs repo restack
+stderr 'Restacked 3 branches'
+
+# Verify all branches are restacked with merge commits
+git graph --branches
+stdout 'Restack feat3 onto feat2 via merge'
+stdout 'Restack feat2 onto feat1 via merge'
+stdout 'Restack feat1 onto main via merge'
+stdout 'feat3 commit'
+stdout 'feat2 commit' 
+stdout 'feat1 commit'
+stdout 'New trunk commit'
+stdout 'Initial commit'
+
+# Verify that merge commits were created (should have 2 parents)
+git rev-list --parents feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat3 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+-- repo/feat1.txt --
+feature 1
+-- repo/feat2.txt --
+feature 2
+-- repo/feat3.txt --
+feature 3

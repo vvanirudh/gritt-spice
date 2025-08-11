@@ -44,7 +44,10 @@ depends = ["test:*"]
 [tasks."test:default"]
 wait_for = ["generate"]
 description = "Run default tests"
-run = "gotestsum -- ./... -race={{flag(name='race')}}"
+run = """
+gotestsum -- ./... {# -#}
+{%- if flag(name='race') == 'true' %} -race{%- endif %}
+"""
 
 [tasks."test:script"]
 wait_for = ["generate"]
@@ -53,10 +56,10 @@ run = """
 gotestsum -- {# -#}
   -tags=script {# enable script tests -#}
   -run TestScript/{{option(name='run')}} {# run only script tests -#}
-  -race={{flag(name='race')}} {# race detection -#}
+  {%- if flag(name='race') == 'true' %} -race{%- endif %} {# race detection -#}
   -shard-index={{option(name='shard-index', default='0')}} {# shard index -#}
   -shard-count={{option(name='shard-count', default='1')}} {# shard count -#}
-  -update={{flag(name='update')}} {# update expected results -#}
+  {%- if flag(name='update') == 'true' %} -update{%- endif %} {# update expected results -#}
 """
 
 [tasks."_cover_report"]
@@ -69,7 +72,7 @@ description = "Run default tests with coverage"
 run = """
 gotestsum -- {# -#}
   ./... {# run all tests -#}
-  -race={{flag(name='race')}} {# race detection -#}
+  {%- if flag(name='race') == 'true' %} -race{%- endif %} {# race detection -#}
   -coverpkg=./... {# cover all packages -#}
   -coverprofile=cover.out {# -#}
 """
@@ -82,7 +85,7 @@ run = """
 gotestsum -- {# -#}
   -tags=script {# enable script tests -#}
   -run '^TestScript$' {# run only script tests -#}
-  -race={{flag(name='race')}} {# race detection -#}
+  {%- if flag(name='race') == 'true' %} -race{%- endif %} {# race detection -#}
   -coverpkg=./... {# cover all packages -#}
   -coverprofile=cover.out {# -#}
   -shard-index={{option(name='shard-index', default='0')}} {# shard index -#}

@@ -1,0 +1,61 @@
+# Test single branch restack with merge method - conflict-free
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create multiple commits on feature branch to show merge benefit
+git add feat1-1.txt
+gs branch create feat1 -m 'feat1: first change'
+git add feat1-2.txt  
+git commit -m 'feat1: second change'
+git add feat1-3.txt
+git commit -m 'feat1: third change'
+
+# Create a second branch
+git add feat2.txt
+gs branch create feat2 -m 'feat2 commit'
+
+# Move trunk forward to require restacking
+gs branch checkout main
+git commit --allow-empty -m 'New trunk commit'
+
+# Restack just the first branch
+gs branch checkout feat1
+gs branch restack
+
+# Verify feat1 is restacked with merge
+git graph --branches
+stdout 'Restack feat1 onto main via merge'
+stdout 'feat1: third change'
+stdout 'feat1: second change'
+stdout 'feat1: first change'
+stdout 'feat2 commit'
+stdout 'New trunk commit'
+stdout 'Initial commit'
+
+# Verify the merge commit has multiple parents
+git rev-list --parents feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Check that feat2 can also be restacked (it should now restack onto feat1)
+gs branch checkout feat2
+gs branch restack
+stderr 'feat2: restacked on feat1'
+
+-- repo/feat1-1.txt --
+feature 1 change 1
+-- repo/feat1-2.txt --
+feature 1 change 2
+-- repo/feat1-3.txt --
+feature 1 change 3
+-- repo/feat2.txt --
+feature 2

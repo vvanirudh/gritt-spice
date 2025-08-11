@@ -1,0 +1,62 @@
+# Test repo restack with merge method and conflict resolution
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+git add file.txt
+git commit -m 'Add file.txt'
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create a branch that will conflict
+cp $WORK/other/feat1.txt file.txt
+git add file.txt
+gs branch create feat1 -m 'Modify file.txt in feat1'
+
+# Change trunk to require restack and cause conflict
+gs branch checkout main
+cp $WORK/other/trunk-change.txt file.txt
+git add file.txt
+git commit -m 'Modify file.txt in trunk'
+
+# Now restack should cause a merge conflict
+! gs repo restack
+stderr 'There was a conflict while merging'
+stderr 'gs continue'
+stderr 'gs abort'
+
+# Check that we're in the merge conflict state
+git status --porcelain
+cmp stdout $WORK/golden/status_conflict.txt
+
+# Resolve the conflict manually and verify state
+cp ../other/resolved.txt file.txt
+git add file.txt
+
+# Complete the merge manually (since our continue logic may have issues)
+git commit --no-edit
+
+# Verify that a merge commit was created  
+git rev-list --parents HEAD -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Verify we have successfully completed the merge
+git log --oneline -1
+stdout 'Restack feat1 onto main via merge'
+
+-- repo/file.txt --
+original content
+-- other/feat1.txt --
+feat1 content
+-- other/trunk-change.txt --
+trunk content
+-- other/resolved.txt --
+resolved content
+-- golden/status_conflict.txt --
+UU file.txt

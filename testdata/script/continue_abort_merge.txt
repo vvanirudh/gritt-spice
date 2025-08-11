@@ -1,0 +1,77 @@
+# Test gs continue and gs abort commands with merge conflicts
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+git add file.txt
+git commit -m 'Add file.txt'
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create a branch that will conflict
+cp $WORK/other/feat1.txt file.txt
+git add file.txt
+gs branch create feat1 -m 'Modify file.txt in feat1'
+
+# Create another branch for testing stack
+git add feat2.txt
+gs branch create feat2 -m 'Add feat2.txt'
+
+# Change trunk to require restack and cause conflict
+gs branch checkout main
+cp $WORK/other/trunk-change.txt file.txt
+git add file.txt
+git commit -m 'Modify file.txt in trunk'
+
+# Test abort functionality
+! gs repo restack
+stderr 'There was a conflict while merging'
+
+# Abort the operation
+gs abort
+stderr 'Merge aborted'
+
+# Verify we're back to a clean state
+git status --porcelain
+! stdout .
+
+# Try again and test continue functionality
+! gs repo restack
+stderr 'There was a conflict while merging'
+
+# Check that we have merge state
+git status --porcelain
+stdout 'UU file.txt'
+
+# Resolve the conflict and continue
+cp ../other/resolved.txt file.txt
+git add file.txt
+gs continue --no-edit
+
+# Should have completed the restack
+stderr 'Restacked [0-9]+ branches'
+
+# Verify both branches are now restacked
+git graph --branches
+stdout 'Restack feat2 onto feat1 via merge'
+stdout 'Restack feat1 onto main via merge'
+stdout 'Add feat2.txt'
+stdout 'Modify file.txt in feat1'
+stdout 'Modify file.txt in trunk'
+
+-- repo/file.txt --
+original content
+-- repo/feat2.txt --
+feature 2
+-- other/feat1.txt --
+feat1 content
+-- other/trunk-change.txt --
+trunk content
+-- other/resolved.txt --
+resolved content
