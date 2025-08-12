@@ -52,16 +52,43 @@ func (cmd *abortCmd) Run(
 
 	// Check if there's a merge in progress
 	if _, err := wt.MergeState(ctx); err == nil {
+		// Before aborting, get continuation information to determine what branch to restore
+		// This is needed for merge-based restacking which may leave us in detached HEAD
+		conts, contErr := store.TakeContinuations(ctx, "abort merge")
+		var targetBranch string
+		if contErr == nil && len(conts) > 0 {
+			targetBranch = conts[0].Branch
+			if targetBranch != "" {
+				log.Debug("Found target branch from continuations", "branch", targetBranch)
+			}
+		}
+
 		// Merge is in progress, abort it
 		log.Debug("Merge in progress, aborting merge")
 		if err := wt.MergeAbort(ctx); err != nil {
+			// If abort fails and we have continuations, try to restore them
+			if contErr == nil && len(conts) > 0 {
+				if restoreErr := store.AppendContinuations(ctx, "restore after failed abort", conts...); restoreErr != nil {
+					log.Warn("Failed to restore continuations after failed abort", "error", restoreErr)
+				}
+			}
 			return fmt.Errorf("abort merge: %w", err)
 		}
 		log.Info("Merge aborted.")
 		
-		// Clear any continuations
-		if conts, err := store.TakeContinuations(ctx, "abort merge"); err != nil {
-			log.Warn("Failed to clear continuations", "error", err)
+		// After successful abort, try to checkout the target branch if we have one
+		if targetBranch != "" {
+			if err := wt.Checkout(ctx, targetBranch); err != nil {
+				log.Warn("Could not checkout target branch after abort", 
+					"branch", targetBranch, "error", err)
+			} else {
+				log.Debug("Restored target branch after abort", "branch", targetBranch)
+			}
+		}
+		
+		// Report cleared continuations
+		if contErr != nil {
+			log.Warn("Failed to clear continuations", "error", contErr)
 		} else if len(conts) > 0 {
 			log.Infof("Cleared %d queued continuation(s).", len(conts))
 		}

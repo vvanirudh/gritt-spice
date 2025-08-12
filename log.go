@@ -228,8 +228,7 @@ func (cmd *branchLogCmd) run(
 				if opts.Commits && baseHash != git.ZeroHash {
 					commits, err := sliceutil.CollectErr(repo.ListCommitsDetails(ctx,
 						git.CommitRangeFrom(branch.Head).
-							ExcludeFrom(baseHash).
-							FirstParent()))
+							ExcludeFrom(baseHash)))
 					if err != nil {
 						log.Warn("Could not list commits for branch. Skipping.", "branch", branch.Name, "error", err)
 					} else {
