@@ -18,6 +18,7 @@ type branchOntoCmd struct {
 
 	Branch string `help:"Branch to move" placeholder:"NAME" predictor:"trackedBranches"`
 	Onto   string `arg:"" optional:"" help:"Destination branch" predictor:"trackedBranches"`
+	Method string `config:"restack.method" default:"rebase" help:"Method to use for restacking: 'rebase' or 'merge'" enum:"rebase,merge"`
 }
 
 func (*branchOntoCmd) Help() string {
@@ -38,6 +39,10 @@ func (*branchOntoCmd) Help() string {
 			trunk                   trunk
 
 		Use --branch to move a different branch than the current one.
+
+		For upstack restacking operations, respects the 'spice.restack.method' 
+		configuration. Set to 'merge' to use merge commits instead 
+		of rebase for preserving individual commit history.
 
 		A prompt will allow selecting the new base.
 		Use the spice.branchPrompt.sort configuration option
@@ -127,6 +132,7 @@ func (cmd *branchOntoCmd) Run(
 		if err := (&upstackOntoCmd{
 			Branch: above,
 			Onto:   branch.Base,
+			Method: cmd.Method, // Pass the restack method configuration
 		}).Run(ctx, log, svc, restackHandler); err != nil {
 			return svc.RebaseRescue(ctx, spice.RebaseRescueRequest{
 				Err:     err,

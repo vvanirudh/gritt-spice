@@ -19,6 +19,7 @@ type upstackOntoCmd struct {
 
 	Branch string `help:"Branch to start at" placeholder:"NAME" predictor:"trackedBranches"`
 	Onto   string `arg:"" optional:"" help:"Destination branch" predictor:"trackedBranches"`
+	Method string `config:"restack.method" default:"rebase" help:"Method to use for restacking: 'rebase' or 'merge'" enum:"rebase,merge"`
 }
 
 func (*upstackOntoCmd) Help() string {
@@ -38,6 +39,10 @@ func (*upstackOntoCmd) Help() string {
 		Use 'gs branch onto' to leave the branch's upstack alone.
 
 		Use --branch to move a different branch than the current one.
+
+		For upstack restacking, respects the 'spice.restack.method' 
+		configuration. Set to 'merge' to use merge commits instead 
+		of rebase for preserving individual commit history.
 
 		A prompt will allow selecting the new base.
 		Use the spice.branchPrompt.sort configuration option
@@ -115,12 +120,23 @@ func (cmd *upstackOntoCmd) Run(
 	svc *spice.Service,
 	restackHandler RestackHandler,
 ) error {
+	// Parse the restack method from configuration
+	method, err := spice.ParseRestackMethod(cmd.Method)
+	if err != nil {
+		return fmt.Errorf("invalid restack method: %w", err)
+	}
+
+	// Configure the handler with the restack method if it's a restack.Handler
+	if h, ok := restackHandler.(*restack.Handler); ok {
+		restackHandler = h.WithRestackMethod(method)
+	}
+
 	// Implementation note:
 	// This is a pretty straightforward operation despite the large scope.
 	// It starts by rebasing only the current branch onto the target
 	// branch, updating internal state to point to the new base.
 	// Following that, an 'upstack restack' will handle the upstack branches.
-	err := svc.BranchOnto(ctx, &spice.BranchOntoRequest{
+	err = svc.BranchOnto(ctx, &spice.BranchOntoRequest{
 		Branch: cmd.Branch,
 		Onto:   cmd.Onto,
 	})
