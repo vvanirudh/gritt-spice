@@ -17,6 +17,7 @@ import (
 	"go.abhg.dev/gs/internal/git"
 	"go.abhg.dev/gs/internal/graph"
 	branchdel "go.abhg.dev/gs/internal/handler/delete"
+	"go.abhg.dev/gs/internal/handler/restack"
 	"go.abhg.dev/gs/internal/must"
 	"go.abhg.dev/gs/internal/silog"
 	"go.abhg.dev/gs/internal/spice"
@@ -151,6 +152,7 @@ type TrunkOptions struct {
 
 	Restack       bool          `help:"Restack the current stack after syncing"`
 	ClosedChanges ClosedChanges `default:"ask" config:"repoSync.closedChanges" enum:"ask,ignore" help:"How to handle closed change requests" hidden:""`
+	RestackMethod string        `config:"restack.method" default:"rebase" enum:"rebase,merge" help:"Method to use for restacking: 'rebase' or 'merge'" hidden:""`
 }
 
 // SyncTrunk syncs the trunk branch with the remote repository,
@@ -361,9 +363,22 @@ func (h *Handler) SyncTrunk(ctx context.Context, opts *TrunkOptions) error {
 		if err != nil {
 			log.Warn("Failed to get current branch, skipping restack", "error", err)
 		} else {
+			// Parse the restack method from configuration
+			restackHandler := h.Restack
+			if opts.RestackMethod != "" {
+				method, err := spice.ParseRestackMethod(opts.RestackMethod)
+				if err != nil {
+					log.Warn("Invalid restack method, using default", "method", opts.RestackMethod, "error", err)
+				} else {
+					// Configure the handler with the restack method if it's a restack.Handler
+					if rh, ok := h.Restack.(*restack.Handler); ok {
+						restackHandler = rh.WithRestackMethod(method)
+					}
+				}
+			}
 			// TODO: if the merged branch leaves us on trunk
 			// --restack will end up restacking all known branches.
-			return h.Restack.RestackStack(ctx, currentBranch)
+			return restackHandler.RestackStack(ctx, currentBranch)
 		}
 	}
 
