@@ -352,7 +352,14 @@ func (h *Handler) SyncTrunk(ctx context.Context, opts *TrunkOptions) error {
 		}
 	}
 
-	if err := h.deleteBranches(ctx, branchesToDelete); err != nil {
+	// Parse the restack method for automatic upstack moves during deletion
+	restackMethod, parseErr := spice.ParseRestackMethod(opts.RestackMethod)
+	if parseErr != nil {
+		log.Warn("Invalid restack method for deletion, using default", "method", opts.RestackMethod, "error", parseErr)
+		restackMethod = spice.RestackMethodRebase // fallback to default
+	}
+
+	if err := h.deleteBranches(ctx, branchesToDelete, restackMethod); err != nil {
 		return err
 	}
 
@@ -364,17 +371,16 @@ func (h *Handler) SyncTrunk(ctx context.Context, opts *TrunkOptions) error {
 			log.Warn("Failed to get current branch, skipping restack", "error", err)
 		} else {
 			// Parse the restack method from configuration
+			method, err := spice.ParseRestackMethod(opts.RestackMethod)
+			if err != nil {
+				log.Warn("Invalid restack method, using default", "method", opts.RestackMethod, "error", err)
+				return h.Restack.RestackStack(ctx, currentBranch)
+			}
+
+			// Configure the handler with the restack method if it's a restack.Handler
 			restackHandler := h.Restack
-			if opts.RestackMethod != "" {
-				method, err := spice.ParseRestackMethod(opts.RestackMethod)
-				if err != nil {
-					log.Warn("Invalid restack method, using default", "method", opts.RestackMethod, "error", err)
-				} else {
-					// Configure the handler with the restack method if it's a restack.Handler
-					if rh, ok := h.Restack.(*restack.Handler); ok {
-						restackHandler = rh.WithRestackMethod(method)
-					}
-				}
+			if rh, ok := h.Restack.(*restack.Handler); ok {
+				restackHandler = rh.WithRestackMethod(method)
 			}
 			// TODO: if the merged branch leaves us on trunk
 			// --restack will end up restacking all known branches.
@@ -761,7 +767,7 @@ type branchDeletion struct {
 	UpstreamName string
 }
 
-func (h *Handler) deleteBranches(ctx context.Context, branchesToDelete []branchDeletion) error {
+func (h *Handler) deleteBranches(ctx context.Context, branchesToDelete []branchDeletion, restackMethod spice.RestackMethod) error {
 	if len(branchesToDelete) == 0 {
 		return nil
 	}
@@ -792,8 +798,9 @@ func (h *Handler) deleteBranches(ctx context.Context, branchesToDelete []branchD
 	}
 
 	err := h.Delete.DeleteBranches(ctx, &branchdel.Request{
-		Branches: deleteBranchNames,
-		Force:    true,
+		Branches:      deleteBranchNames,
+		Force:         true,
+		RestackMethod: restackMethod,
 	})
 	if err != nil {
 		return fmt.Errorf("delete merged branches: %w", err)

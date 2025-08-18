@@ -22,6 +22,10 @@ type BranchOntoRequest struct {
 
 	// MergedDownstack for [Branch], if any.
 	MergedDownstack *[]json.RawMessage
+
+	// Method specifies how to perform the operation.
+	// Defaults to RestackMethodRebase if not specified.
+	Method RestackMethod
 }
 
 // BranchOnto moves the commits of a branch onto a different base branch,
@@ -107,14 +111,62 @@ func (s *Service) BranchOnto(ctx context.Context, req *BranchOntoRequest) error 
 		return fmt.Errorf("set base of branch %s to %s: %w", req.Branch, req.Onto, err)
 	}
 
-	if err := s.wt.Rebase(ctx, git.RebaseRequest{
-		Branch:    req.Branch,
-		Upstream:  string(fromHash),
-		Onto:      ontoHash.String(),
-		Autostash: true,
-		Quiet:     true, // TODO: if verbose, disable this
-	}); err != nil {
-		return fmt.Errorf("rebase: %w", err)
+	if req.Method == RestackMethodMerge {
+		// For merge method, we create a merge commit that combines the branch's commits
+		// with the new base, similar to the existing restack merge implementation.
+		
+		currentBranch, err := s.wt.CurrentBranch(ctx)
+		if err != nil {
+			return fmt.Errorf("get current branch: %w", err)
+		}
+		
+		// Checkout the new base (onto)
+		if err := s.wt.Checkout(ctx, req.Onto); err != nil {
+			return fmt.Errorf("checkout onto branch %s: %w", req.Onto, err)
+		}
+		
+		// Merge the original branch into the new base
+		msg := fmt.Sprintf("Restack %s onto %s via merge", req.Branch, req.Onto)
+		if err := s.wt.Merge(ctx, git.MergeRequest{
+			Source:        req.Branch,
+			Message:       msg,
+			NoFastForward: true, // Always create a merge commit
+		}); err != nil {
+			return fmt.Errorf("merge %s into %s: %w", req.Branch, req.Onto, err)
+		}
+		
+		// Get the merge commit hash
+		mergeCommit, err := s.repo.PeelToCommit(ctx, "HEAD")
+		if err != nil {
+			return fmt.Errorf("get merge commit: %w", err)
+		}
+		
+		// Update the original branch to point to the merge commit
+		if err := s.repo.CreateBranch(ctx, git.CreateBranchRequest{
+			Name:  req.Branch,
+			Head:  mergeCommit.String(),
+			Force: true, // Overwrite existing branch
+		}); err != nil {
+			return fmt.Errorf("update branch pointer: %w", err)
+		}
+		
+		// Switch back to the original branch if needed
+		if currentBranch != req.Branch {
+			if err := s.wt.Checkout(ctx, currentBranch); err != nil {
+				return fmt.Errorf("checkout original branch %s: %w", currentBranch, err)
+			}
+		}
+	} else {
+		// Default rebase method
+		if err := s.wt.Rebase(ctx, git.RebaseRequest{
+			Branch:    req.Branch,
+			Upstream:  string(fromHash),
+			Onto:      ontoHash.String(),
+			Autostash: true,
+			Quiet:     true, // TODO: if verbose, disable this
+		}); err != nil {
+			return fmt.Errorf("rebase: %w", err)
+		}
 	}
 
 	if err := branchTx.Commit(ctx, fmt.Sprintf("%v: onto %v", req.Branch, req.Onto)); err != nil {

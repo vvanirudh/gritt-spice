@@ -139,6 +139,7 @@ func (cmd *upstackOntoCmd) Run(
 	err = svc.BranchOnto(ctx, &spice.BranchOntoRequest{
 		Branch: cmd.Branch,
 		Onto:   cmd.Onto,
+		Method: method,
 	})
 	if err != nil {
 		// If the rebase is interrupted,

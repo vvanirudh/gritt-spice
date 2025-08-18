@@ -145,9 +145,16 @@ func (cmd *branchOntoCmd) Run(
 
 	// Only after the upstacks have been moved
 	// will we move the branch itself and update its internal state.
+	// Parse the restack method from configuration
+	method, err := spice.ParseRestackMethod(cmd.Method)
+	if err != nil {
+		return fmt.Errorf("invalid restack method: %w", err)
+	}
+
 	if err := svc.BranchOnto(ctx, &spice.BranchOntoRequest{
 		Branch: cmd.Branch,
 		Onto:   cmd.Onto,
+		Method: method,
 	}); err != nil {
 		// If the rebase is interrupted,
 		// we'll just re-run this command again later.

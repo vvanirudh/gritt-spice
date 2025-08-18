@@ -71,6 +71,9 @@ type Handler struct {
 type Request struct {
 	Branches []string
 	Force    bool
+	// RestackMethod specifies how to restack upstack branches.
+	// Defaults to rebase if not specified.
+	RestackMethod spice.RestackMethod
 }
 
 // DeleteBranches deletes the specified branches from the repository,
@@ -259,6 +262,7 @@ func (h *Handler) DeleteBranches(ctx context.Context, req *Request) error {
 			if err := h.Service.BranchOnto(ctx, &spice.BranchOntoRequest{
 				Branch: above,
 				Onto:   base,
+				Method: req.RestackMethod,
 			}); err != nil {
 				contCmd := []string{"branch", "delete"}
 				if req.Force {
