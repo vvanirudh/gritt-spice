@@ -27,6 +27,8 @@ type commitAmendCmd struct {
 	// TODO:
 	// Remove this short form and put it on NoVerify.
 	NoEditDeprecated bool `hidden:"true" short:"n" help:"Don't edit the commit message"`
+
+	Method string `config:"restack.method" default:"rebase" help:"Method to use for restacking: 'rebase' or 'merge'" enum:"rebase,merge"`
 }
 
 func (*commitAmendCmd) Help() string {
@@ -192,6 +194,17 @@ func (cmd *commitAmendCmd) Run(
 	if detachedHead {
 		log.Debug("HEAD is detached, skipping restack")
 		return nil
+	}
+
+	// Parse the restack method from configuration
+	method, err := spice.ParseRestackMethod(cmd.Method)
+	if err != nil {
+		return fmt.Errorf("invalid restack method: %w", err)
+	}
+
+	// Configure the handler with the restack method if it's a restack.Handler
+	if h, ok := restackHandler.(*restack.Handler); ok {
+		restackHandler = h.WithRestackMethod(method)
 	}
 
 	return restackHandler.RestackUpstack(ctx, currentBranch, &restack.UpstackOptions{

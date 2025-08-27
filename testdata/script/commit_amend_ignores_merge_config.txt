@@ -1,0 +1,58 @@
+# Test that gs commit amend respects spice.restack.method=merge config
+# This test reproduces the bug where amend auto-restack always uses rebase
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+gs repo init
+
+# Create base branch with initial content
+git add base.txt
+gs branch create base -m 'base commit'
+
+# Create child branch on top of base
+git add child.txt  
+gs branch create child -m 'child commit'
+
+# Verify initial setup - child is based on base
+gs log short
+stderr 'child'
+stderr 'base'
+
+# Switch to base and amend the commit (should trigger auto-restack)
+gs branch checkout base
+git add base-extra.txt
+gs commit amend --no-edit -m 'amended base commit'
+
+# BUG: The auto-restack should use merge method but currently uses rebase
+# Check if merge method was used (correct behavior)
+git log --oneline child
+stdout 'Restack child onto base via merge'
+
+# Verify merge commit structure (should have 2 parents)
+git rev-list --parents child -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Verify no rebase operations were used
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Verify upstack isolation - amended base commit should not appear in child's non-merge history
+# The child branch should contain its own commits and the original base commit, but not the amended version
+git log --oneline base..child --no-merges
+stdout 'child commit'
+stdout 'base commit'  # Original base commit is part of child's history
+! stdout 'amended base commit'  # Amended base should not leak into child
+
+-- repo/base.txt --
+base content
+-- repo/base-extra.txt --
+extra base content
+-- repo/child.txt --
+child content
