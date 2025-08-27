@@ -1,0 +1,142 @@
+# Comprehensive test for commit create with merge method auto-restack
+# Tests automatic upstack restacking after commits using merge method
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create a stack of branches
+git add feat1.txt
+gs branch create feat1 -m 'feat1 initial commit'
+git add feat2.txt
+gs branch create feat2 -m 'feat2 initial commit'
+git add feat3.txt
+gs branch create feat3 -m 'feat3 initial commit'
+
+# Test: Commit create with auto-restack using merge method
+gs branch checkout feat1
+git add feat1-change.txt
+gs commit create -m 'feat1 new change' --method=merge
+
+# Verify upstack branches were restacked with merge
+git log --oneline feat2
+stdout 'Restack feat2 onto feat1 via merge'
+stdout 'feat2 initial commit'
+
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+stdout 'feat3 initial commit'
+
+# Verify merge commits were created for restacked branches
+git rev-list --parents feat2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat3 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test: Method consistency - no rebase operations during auto-restack
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Test: Multiple commits with auto-restack
+gs branch checkout feat2
+git add feat2-change.txt
+gs commit create -m 'feat2 new change' --method=merge
+
+# Only feat3 should be restacked (it's the only upstack)
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+
+# feat1 should not be restacked (it's downstack)
+git log --oneline feat1
+! stdout 'Restack feat1'
+stdout 'feat1 new change'
+
+# Test: Configuration override behavior
+git config spice.restack.method rebase
+gs branch checkout feat3
+git add feat3-change.txt
+gs commit create -m 'feat3 new change' --method=merge
+
+# Should use merge despite rebase configuration
+# (No upstack to restack in this case, but commit should succeed)
+git log --oneline feat3
+stdout 'feat3 new change'
+
+# Test: Commit with no upstack (should not error)
+gs branch checkout main
+git add main-change.txt
+gs commit create -m 'main change' --method=merge
+
+# feat1 should be restacked (main is its base)
+git log --oneline feat1
+stdout 'main change'
+
+# Test: Stage all option with merge method
+gs branch checkout feat1
+git add feat1-stage-all.txt
+git add feat1-stage-all2.txt
+gs commit create --all -m 'feat1 stage all changes' --method=merge
+
+# Upstack should be restacked with merge
+git log --oneline feat2
+stdout 'Restack feat2 onto feat1 via merge'
+
+# Test: Fixup commit with merge method
+gs branch checkout feat2
+git add feat2-fixup.txt
+git commit -m 'feat2 temporary commit'
+
+# Create fixup commit
+git add feat2-fixup2.txt
+gs commit create --fixup HEAD~1 --method=merge
+
+# Should have created fixup commit and restacked upstack
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+
+# Test: No-verify option
+gs branch checkout feat1
+git add feat1-no-verify.txt
+gs commit create -m 'feat1 no verify' --no-verify --method=merge
+
+# Should still restack upstack with merge
+git log --oneline feat2
+stdout 'Restack feat2 onto feat1 via merge'
+
+# Test: Verify git state is clean after all operations
+git status --porcelain
+! stdout .
+
+-- repo/feat1.txt --
+feature 1 initial
+-- repo/feat2.txt --
+feature 2 initial
+-- repo/feat3.txt --
+feature 3 initial
+-- repo/feat1-change.txt --
+feature 1 change
+-- repo/feat2-change.txt --
+feature 2 change
+-- repo/feat3-change.txt --
+feature 3 change
+-- repo/main-change.txt --
+main change
+-- repo/feat1-stage-all.txt --
+feature 1 stage all 1
+-- repo/feat1-stage-all2.txt --
+feature 1 stage all 2
+-- repo/feat2-fixup.txt --
+feature 2 fixup 1
+-- repo/feat2-fixup2.txt --
+feature 2 fixup 2
+-- repo/feat1-no-verify.txt --
+feature 1 no verify

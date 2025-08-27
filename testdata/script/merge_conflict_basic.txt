@@ -1,0 +1,91 @@
+# Basic merge conflict scenarios - simplified version
+# Tests essential conflict handling: abort and continue
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+git config spice.continue.edit false  # Skip editor for testing
+gs repo init
+
+# Setup: Create base content for conflicts
+git add shared.txt
+git commit -m 'Add shared file'
+
+# Create feature branch that will conflict
+cp $WORK/feature-version.txt shared.txt
+git add shared.txt
+gs branch create feature -m 'Feature changes shared file'
+
+# Modify main to create conflict
+gs branch checkout main
+cp $WORK/main-version.txt shared.txt
+git add shared.txt
+git commit -m 'Main changes shared file'
+
+# Test 1: Basic merge conflict with abort
+gs branch checkout feature
+! gs branch restack --method=merge
+stderr 'conflict'
+
+# Verify we're in merge state
+git status --porcelain
+stdout 'UU shared.txt'
+
+# Test abort functionality
+gs abort
+stderr 'Merge aborted'
+
+# Verify clean state after abort
+git status --porcelain
+! stdout '^UU'
+! stdout '^AA'
+! stdout '^DD'
+
+# Verify we're back on feature branch
+git branch --show-current
+stdout 'feature'
+
+# Test 2: Merge conflict with continue
+! gs branch restack --method=merge
+stderr 'conflict'
+
+# Resolve conflict manually
+cp $WORK/resolved-version.txt shared.txt
+git add shared.txt
+
+# Continue the merge
+gs continue
+stderr 'branch.*restacked'
+
+# Verify merge was completed
+git log --oneline -1 feature
+stdout 'Restack feature onto main via merge'
+
+# Verify resolved content is present
+git show HEAD:shared.txt
+stdout 'resolved shared content with both changes'
+
+# Test 3: Verify merge direction is correct
+git rev-list --parents HEAD -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test 4: Final state verification
+git status --porcelain
+! stdout '^UU'
+! stdout '^AA'
+! stdout '^DD'
+
+-- repo/shared.txt --
+original shared content
+-- feature-version.txt --
+feature version of shared content
+-- main-version.txt --
+main version of shared content
+-- resolved-version.txt --
+resolved shared content with both changes

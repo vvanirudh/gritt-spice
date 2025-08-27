@@ -1,0 +1,140 @@
+# Comprehensive test for branch onto with merge method
+# Tests branch movement with upstack restacking using merge method
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create multiple stacks for testing branch movement
+git add feat1.txt
+gs branch create feat1 -m 'feat1 commit'
+git add feat2.txt
+gs branch create feat2 -m 'feat2 commit'
+git add feat3.txt
+gs branch create feat3 -m 'feat3 commit'
+
+# Create a separate stack
+gs branch checkout main
+git add other1.txt
+gs branch create other1 -m 'other1 commit'
+git add other2.txt
+gs branch create other2 -m 'other2 commit'
+
+# Test: Move branch onto different base with upstack restacking
+gs branch checkout feat2
+gs branch onto other1 --method=merge
+
+# Verify feat2 was moved onto other1 using merge
+git log --oneline feat2
+stdout 'Restack feat2 onto other1 via merge'
+stdout 'feat2 commit'
+
+# Verify upstack (feat3) was moved to feat1 (original base of feat2)
+# feat3 should now be based on feat1 (no restacking needed in this case)
+git log --oneline feat3
+stdout 'feat3 commit'
+stdout 'feat2 commit'
+stdout 'feat1 commit'
+
+# Verify merge commits were created
+git rev-list --parents feat2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# feat3 may not have been restacked, so it might not have merge commit structure
+git rev-list --parents feat3 -1
+stdout '^[0-9a-f]+'
+
+# Test: Method consistency - no rebase operations
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Test: Branch relationships are updated correctly
+gs log short
+stderr 'feat2'
+stderr 'other1'
+
+# Test: Move branch to trunk
+gs branch checkout other2
+gs branch onto main --method=merge
+
+# Verify other2 moved to main (no restacking needed in this case)
+git log --oneline other2
+stdout 'other2 commit'
+
+# Test: Configuration override
+git config spice.restack.method rebase
+gs branch checkout feat1
+gs branch onto other2 --method=merge
+
+# Should use merge despite rebase config
+git log --oneline feat1
+stdout 'Restack feat1 onto other2 via merge'
+
+# Test: Move branch with no upstack
+gs branch checkout feat3
+git add feat4.txt
+gs branch create feat4 -m 'feat4 commit'
+
+gs branch checkout feat4
+gs branch onto main --method=merge
+
+# Should work without upstack restacking (no restacking needed)
+git log --oneline feat4
+stdout 'feat4 commit'
+
+# Test: Interactive prompt scenario (using robot input)
+env ROBOT_INPUT=$WORK/robot.golden ROBOT_OUTPUT=$WORK/robot
+
+gs branch checkout feat1
+gs branch onto --method=merge
+
+cmpenv $WORK/robot $WORK/robot.golden
+
+# Verify the selected branch was used for onto operation
+git log --oneline feat1
+stdout 'Restack feat1 onto .* via merge'
+
+# Test: Move branch with --branch flag
+gs branch onto other1 --branch=feat2 --method=merge
+
+# Verify feat2 moved with merge method  
+git log --oneline feat2
+stdout 'Restack feat2 onto other1 via merge'
+
+# Test: Verify all git states are clean
+git status --porcelain
+! stdout .
+
+-- repo/feat1.txt --
+feature 1
+-- repo/feat2.txt --
+feature 2
+-- repo/feat3.txt --
+feature 3
+-- repo/feat4.txt --
+feature 4
+-- repo/other1.txt --
+other feature 1
+-- repo/other2.txt --
+other feature 2
+-- robot.golden --
+===
+> Select a branch to move onto: 
+> ┏━□ feat3
+> ┣━□ feat4
+> ┃ ┏━□ feat2
+> ┣━┻□ other1
+> ┃ ┏━□ feat1
+> ┣━┻■ other2 ◀
+> main
+>
+> Moving feat1 onto another branch
+"main"

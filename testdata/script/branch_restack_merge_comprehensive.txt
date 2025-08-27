@@ -1,0 +1,92 @@
+# Comprehensive test for single branch restack with merge method
+# Tests method consistency, merge direction, and state validation
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create feature branch with multiple commits to show merge preservation
+git add feat1-1.txt
+gs branch create feat1 -m 'feat1: first change'
+git add feat1-2.txt  
+git commit -m 'feat1: second change'
+git add feat1-3.txt
+git commit -m 'feat1: third change'
+
+# Record original commits for validation
+git log --oneline feat1
+cp stdout $WORK/original-commits.txt
+
+# Move trunk forward to require restacking
+gs branch checkout main
+git add trunk-change.txt
+git commit -m 'New trunk commit'
+
+# Test: Basic merge restack
+gs branch checkout feat1
+gs branch restack --method=merge
+
+# Verify merge commit was created with correct message
+git log --oneline -1 feat1
+stdout 'Restack feat1 onto main via merge'
+
+# Verify merge direction: should have 2 parents (merge commit)
+git rev-list --parents feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Verify original commits are preserved in history
+git log --oneline feat1
+stdout 'feat1: third change'
+stdout 'feat1: second change' 
+stdout 'feat1: first change'
+stdout 'New trunk commit'
+stdout 'Initial commit'
+
+# Test: Method consistency - verify no rebase operations occurred
+git log --oneline --grep='rebase' feat1
+! stdout .
+
+# Test: Verify merge commit structure
+# Check that the merge has main as an ancestor
+git merge-base main feat1
+stdout '[0-9a-f]+'
+
+# Verify we can reach all original commits
+git log --oneline feat1 --grep='feat1: first change'
+stdout 'feat1: first change'
+
+# Test: Verify branch is properly restacked (no longer needs restacking)
+gs branch restack
+stderr 'does not need to be restacked'
+
+# Test: Verify git state is clean
+git status --porcelain
+! stdout .
+
+# Test: Command-line flag override should work
+git config spice.restack.method rebase
+gs branch checkout main
+git commit --allow-empty -m 'Another trunk commit'
+
+# Test restacking while on the branch (this should work with our fix)
+gs branch checkout feat1
+gs branch restack --method=merge
+git log --oneline -1 feat1
+stdout 'Restack feat1 onto main via merge'
+
+-- repo/feat1-1.txt --
+feature 1 change 1
+-- repo/feat1-2.txt --
+feature 1 change 2
+-- repo/feat1-3.txt --
+feature 1 change 3
+-- repo/trunk-change.txt --
+trunk modification

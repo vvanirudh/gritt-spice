@@ -1,0 +1,266 @@
+# Test merge state consistency and branch pointer validation  
+# Verifies git state remains consistent after merge operations
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create complex branch structure for state testing
+git add main-file.txt
+git commit -m 'Add main file'
+
+git add feat1.txt
+gs branch create feat1 -m 'Add feat1'
+git add feat2.txt
+gs branch create feat2 -m 'Add feat2'
+git add feat3.txt
+gs branch create feat3 -m 'Add feat3'
+
+# Record initial state
+git rev-parse feat1
+cp stdout $WORK/original-feat1.txt
+
+git rev-parse feat2
+cp stdout $WORK/original-feat2.txt
+
+git rev-parse feat3
+cp stdout $WORK/original-feat3.txt
+
+# Move trunk forward
+gs branch checkout main
+git add trunk-change.txt
+git commit -m 'Trunk change'
+
+# Test 1: Basic state consistency after restack
+gs branch checkout feat2
+gs stack restack --method=merge
+
+# Verify all branch pointers are updated correctly
+git rev-parse feat1
+cp stdout $WORK/new-feat1.txt
+
+git rev-parse feat2
+cp stdout $WORK/new-feat2.txt
+
+git rev-parse feat3
+cp stdout $WORK/new-feat3.txt
+
+# Branch pointers should have changed (new merge commits)
+! cmp $WORK/original-feat1.txt $WORK/new-feat1.txt
+! cmp $WORK/original-feat2.txt $WORK/new-feat2.txt
+! cmp $WORK/original-feat3.txt $WORK/new-feat3.txt
+
+# Test 2: Verify git refs consistency
+git for-each-ref refs/heads/
+stdout 'refs/heads/feat1'
+stdout 'refs/heads/feat2'
+stdout 'refs/heads/feat3'
+stdout 'refs/heads/main'
+
+# Test 3: Verify working directory has no merge conflicts or staged changes
+git status --porcelain
+! stdout '^UU'
+! stdout '^AA'
+! stdout '^DD'
+! stdout '^M'
+! stdout '^A'
+
+# Test 4: Verify HEAD pointer consistency
+git branch --show-current
+stdout 'feat2'
+
+git rev-parse HEAD
+cp stdout $WORK/head-hash.txt
+
+git rev-parse feat2
+cp stdout $WORK/feat2-hash.txt
+
+# HEAD should point to feat2
+cmp $WORK/head-hash.txt $WORK/feat2-hash.txt
+
+# Test 5: Verify branch relationships in spice state
+gs log short
+stderr 'feat3'
+stderr 'feat2'
+stderr 'feat1'
+
+# Test 6: Verify commit ancestry is correct
+# feat1 should be descendant of main
+git merge-base main feat1
+cp stdout $WORK/mb1.txt
+
+git rev-parse main~0
+cp stdout $WORK/main-hash.txt
+
+cmp $WORK/mb1.txt $WORK/main-hash.txt
+
+# feat2 should be descendant of feat1
+git merge-base feat1 feat2
+cp stdout $WORK/mb2.txt
+
+cmp $WORK/mb2.txt $WORK/new-feat1.txt
+
+# Test 7: State consistency during complex operations
+gs branch checkout main
+git add complex-change.txt
+git commit -m 'Complex change'
+
+# Create parallel stacks
+git add parallel1.txt
+gs branch create parallel1 -m 'Parallel1'
+git add parallel2.txt
+gs branch create parallel2 -m 'Parallel2'
+
+# Test repo restack state consistency
+gs repo restack --method=merge
+
+# All branches should exist with correct pointers
+git for-each-ref --format='%(refname:short) %(objectname)' refs/heads/
+stdout 'feat1 [0-9a-f]+'
+stdout 'feat2 [0-9a-f]+'
+stdout 'feat3 [0-9a-f]+'
+stdout 'main [0-9a-f]+'
+stdout 'parallel1 [0-9a-f]+'
+stdout 'parallel2 [0-9a-f]+'
+
+# Test 8: State consistency after branch onto
+gs branch checkout feat1
+gs branch onto parallel1 --method=merge
+
+# Verify feat1 moved correctly
+gs log short
+stderr 'feat1'
+stderr 'parallel1'
+
+# Verify upstack moved to main (correct behavior from onto operation) 
+gs branch checkout main
+gs log short
+stderr 'feat2'
+stderr 'feat3'
+
+# Test 9: Index and working tree consistency
+git diff-index --cached HEAD
+! stdout .
+
+git diff-files
+! stdout .
+
+# Test 10: Detached HEAD state handling
+git checkout HEAD~2
+git branch --show-current
+! stdout .  # Should be detached
+
+# Operations should handle detached HEAD gracefully
+gs branch checkout main
+git branch --show-current
+stdout 'main'
+
+# Test 11: Remote ref consistency (if any)
+git for-each-ref refs/remotes/
+! stdout .  # No remotes in this test
+
+# Test 12: Stash consistency
+git stash list
+! stdout .  # No stashes should exist
+
+# Test 13: Verify merge commits have correct structure
+git rev-list --parents feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test 14: Ref log consistency
+git reflog feat1
+stdout 'Reset to 4b86ae'
+
+git reflog feat2
+stdout 'Reset to'
+
+# Test 15: Config state consistency
+git config spice.restack.method
+stdout 'merge'
+
+# Test 16: Verify no temporary refs left behind
+git for-each-ref refs/
+! stdout 'refs/tmp'
+! stdout 'refs/temp'
+
+# Test 17: Verify proper cleanup after aborted operations
+gs branch checkout main
+git add abort-test.txt
+git commit -m 'Abort test'
+
+cp $WORK/conflict-content.txt abort-test.txt
+git add abort-test.txt
+gs branch create conflict-branch -m 'Conflict branch'
+
+gs branch checkout main
+cp $WORK/main-conflict.txt abort-test.txt
+git add abort-test.txt
+git commit -m 'Main conflict'
+
+gs branch checkout conflict-branch
+! gs branch restack --method=merge
+stderr 'conflict'
+
+# Abort and verify clean state
+gs abort
+
+git status --porcelain
+! stdout .
+
+git for-each-ref refs/
+! stdout 'MERGE_HEAD'
+! stdout 'ORIG_HEAD'
+
+# Test 18: Branch deletion state consistency
+gs branch checkout main
+gs branch delete feat3 --force
+
+# Verify branch is gone from refs
+git for-each-ref refs/heads/
+! stdout 'feat3'
+
+# Verify upstack relationships updated in spice state
+gs log short
+! stdout 'feat3'
+
+# Test 19: Final state validation
+git status --porcelain
+! stdout .
+
+git branch --show-current
+stdout 'main'
+
+# Verify all remaining branches have valid commits
+git rev-parse feat1 feat2 parallel1 parallel2 main
+stdout '^[0-9a-f]{40}$'
+
+-- repo/main-file.txt --
+main file content
+-- repo/feat1.txt --
+feature 1 content
+-- repo/feat2.txt --
+feature 2 content
+-- repo/feat3.txt --
+feature 3 content
+-- repo/trunk-change.txt --
+trunk change content
+-- repo/complex-change.txt --
+complex change content
+-- repo/parallel1.txt --
+parallel 1 content
+-- repo/parallel2.txt --
+parallel 2 content
+-- repo/abort-test.txt --
+original abort content
+-- conflict-content.txt --
+conflict version content
+-- main-conflict.txt --
+main conflict content

@@ -1,0 +1,127 @@
+# Comprehensive test for stack restack with merge method
+# Tests full stack restacking with method consistency and edge cases
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create a linear stack
+git add feat1.txt
+gs branch create feat1 -m 'feat1 commit'
+git add feat2.txt
+gs branch create feat2 -m 'feat2 commit'
+git add feat3.txt
+gs branch create feat3 -m 'feat3 commit'
+
+# Move trunk forward to require restacking
+gs branch checkout main
+git add trunk-change.txt
+git commit -m 'New trunk commit'
+
+# Test: Stack restack from middle branch
+gs branch checkout feat2
+gs stack restack --method=merge
+
+# Verify all branches in stack were restacked with merge
+git log --oneline feat1
+stdout 'Restack feat1 onto main via merge'
+stdout 'feat1 commit'
+
+git log --oneline feat2  
+stdout 'Restack feat2 onto feat1 via merge'
+stdout 'feat2 commit'
+
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+stdout 'feat3 commit'
+
+# Verify all restacked branches have merge commits
+git rev-list --parents feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat2 -1  
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat3 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test: Create a divergent branch to test non-linear stacks
+gs branch checkout feat2
+git add divergent.txt
+gs branch create divergent -m 'divergent commit'
+
+# Move trunk again
+gs branch checkout main
+git commit --allow-empty -m 'Second trunk commit'
+
+# Test: Stack restack should handle the linear portion
+gs branch checkout feat3
+gs stack restack --method=merge
+
+# Verify linear stack was restacked
+git log --oneline feat1
+stdout 'Restack feat1 onto main via merge'
+stdout 'Second trunk commit'
+
+git log --oneline feat2
+stdout 'Restack feat2 onto feat1 via merge'
+
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+
+# Test: Method consistency - no rebase operations
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Test: Verify divergent branch relationship is maintained
+gs log short
+stderr 'feat3'
+stderr 'feat2'
+stderr 'feat1'
+
+# Test: Configuration override
+git config spice.restack.method rebase
+gs branch checkout main
+git commit --allow-empty -m 'Third trunk commit'
+
+# Should use merge when explicitly specified
+gs branch checkout feat1
+gs stack restack --method=merge
+
+# Verify merge was used
+git log --oneline feat1
+stdout 'Restack feat1 onto main via merge'
+
+# Test: Stack ordering and relationships
+gs log short
+stderr 'feat3'
+stderr 'feat2'
+stderr 'feat1'
+stderr 'divergent'
+
+# Test: Already restacked detection
+gs stack restack --method=merge
+stderr 'does not need to be restacked'
+
+# Test: Verify git status is clean
+git status --porcelain
+! stdout .
+
+-- repo/feat1.txt --
+feature 1
+-- repo/feat2.txt --
+feature 2
+-- repo/feat3.txt --
+feature 3
+-- repo/divergent.txt --
+divergent feature
+-- repo/trunk-change.txt --
+trunk modification

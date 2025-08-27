@@ -311,6 +311,14 @@ func (s *Service) restackWithMerge(ctx context.Context, branchName string, newBa
 			s.log.Debugf("restackWithMerge: merge already completed, HEAD=%s points to restack merge commit: %s", headCommit, subject)
 			// The merge is already done, we just need to update the branch pointer
 			s.log.Debugf("restackWithMerge: updating branch %s to point to existing merge commit %s", branchName, headCommit)
+			
+			// If we're currently on the branch being updated, checkout detached HEAD first
+			if currentBranch == branchName {
+				if err := s.wt.Checkout(ctx, headCommit.String()); err != nil {
+					return fmt.Errorf("checkout detached HEAD: %w", err)
+				}
+			}
+			
 			if err := s.repo.CreateBranch(ctx, git.CreateBranchRequest{
 				Name:  branchName,
 				Head:  headCommit.String(),
@@ -334,19 +342,26 @@ func (s *Service) restackWithMerge(ctx context.Context, branchName string, newBa
 		}
 	}
 
-	// Checkout the new base commit (detached HEAD) to create merge without moving base branch
-	if err := s.wt.Checkout(ctx, newBase.String()); err != nil {
-		return fmt.Errorf("checkout new base commit %s: %w", newBase, err)
+	// CRITICAL FIX: Get the current tip of the branch being restacked
+	branchCommit, err := s.repo.PeelToCommit(ctx, branchName)
+	if err != nil {
+		return fmt.Errorf("get branch commit %s: %w", branchName, err)
+	}
+	
+	// Checkout the branch being restacked (detached HEAD) to merge base into it
+	// This ensures we merge the base INTO the feature, not feature into base
+	if err := s.wt.Checkout(ctx, branchCommit.String()); err != nil {
+		return fmt.Errorf("checkout branch being restacked %s: %w", branchName, err)
 	}
 
-	// Merge the feature branch into the new base
+	// Merge the new base INTO the feature branch (correct direction)
 	mergeMsg := fmt.Sprintf("Restack %s onto %s via merge", branchName, baseName)
 	if err := s.wt.Merge(ctx, git.MergeRequest{
-		Source:        branchName,
+		Source:        baseName, // Merge the BASE into current HEAD (the feature branch)
 		Message:       mergeMsg,
 		NoFastForward: true, // Always create a merge commit
 	}); err != nil {
-		return fmt.Errorf("merge %s into %s: %w", branchName, baseName, err)
+		return fmt.Errorf("merge %s into %s: %w", baseName, branchName, err)
 	}
 
 	// Get the merge commit hash
@@ -356,6 +371,11 @@ func (s *Service) restackWithMerge(ctx context.Context, branchName string, newBa
 	}
 
 	s.log.Debugf("restackWithMerge: updating branch %s to point to merge commit %s", branchName, mergeCommit)
+	
+	// If we need to update a branch that was originally checked out, we need to stay in detached HEAD
+	// until we update the branch pointer, then check it out again
+	needToRestoreBranch := currentBranch == branchName
+	
 	// Update the feature branch pointer to the merge commit by force-creating it
 	if err := s.repo.CreateBranch(ctx, git.CreateBranchRequest{
 		Name:  branchName,
@@ -367,7 +387,7 @@ func (s *Service) restackWithMerge(ctx context.Context, branchName string, newBa
 	s.log.Debugf("restackWithMerge: successfully updated branch %s", branchName)
 
 	// Restore original branch if needed
-	if currentBranch == branchName {
+	if needToRestoreBranch {
 		if err := s.wt.Checkout(ctx, branchName); err != nil {
 			return fmt.Errorf("checkout restacked branch: %w", err)
 		}

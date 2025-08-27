@@ -1,0 +1,165 @@
+# Comprehensive test for repo restack with merge method
+# Tests repository-wide restacking with complex branch relationships
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create multiple independent stacks and branches
+git add stack1-1.txt
+gs branch create stack1-feat1 -m 'stack1 feat1 commit'
+git add stack1-2.txt
+gs branch create stack1-feat2 -m 'stack1 feat2 commit'
+
+# Create second independent stack
+gs branch checkout main
+git add stack2-1.txt
+gs branch create stack2-feat1 -m 'stack2 feat1 commit'
+git add stack2-2.txt
+gs branch create stack2-feat2 -m 'stack2 feat2 commit'
+
+# Create a single independent branch
+gs branch checkout main
+git add single.txt
+gs branch create single-feat -m 'single feature commit'
+
+# Move trunk forward to require restacking
+gs branch checkout main
+git add trunk-change.txt
+git commit -m 'New trunk commit'
+
+# Test: Repository-wide restack
+gs repo restack --method=merge
+stderr 'Restacked 5 branches'
+
+# Verify all branches were restacked with merge method
+git log --oneline stack1-feat1
+stdout 'Restack stack1-feat1 onto main via merge'
+stdout 'stack1 feat1 commit'
+
+git log --oneline stack1-feat2
+stdout 'Restack stack1-feat2 onto stack1-feat1 via merge'
+stdout 'stack1 feat2 commit'
+
+git log --oneline stack2-feat1
+stdout 'Restack stack2-feat1 onto main via merge' 
+stdout 'stack2 feat1 commit'
+
+git log --oneline stack2-feat2
+stdout 'Restack stack2-feat2 onto stack2-feat1 via merge'
+stdout 'stack2 feat2 commit'
+
+git log --oneline single-feat
+stdout 'Restack single-feat onto main via merge'
+stdout 'single feature commit'
+
+# Verify all branches have merge commits
+git rev-list --parents stack1-feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents stack1-feat2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents stack2-feat1 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents stack2-feat2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents single-feat -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test: Method consistency - no rebase operations
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Test: Branch relationships are preserved
+gs log short
+stderr 'stack1-feat2'
+stderr 'stack1-feat1'
+stderr 'stack2-feat2'
+stderr 'stack2-feat1'
+stderr 'single-feat'
+
+# Test: Already restacked detection
+gs repo restack --method=merge
+stderr 'does not need to be restacked'
+
+# Test: Mixed scenarios - some branches already restacked
+gs branch checkout main
+git commit --allow-empty -m 'Another trunk commit'
+
+# Manually restack one branch with rebase (to test mixed detection)
+git config spice.restack.method rebase
+gs branch checkout stack1-feat1
+gs branch restack
+
+# Now test repo restack with merge - should catch the mixed method
+git config spice.restack.method merge
+gs repo restack --method=merge
+
+# Only branches that needed restacking should be updated
+git log --oneline stack1-feat1
+stdout 'stack1 feat1 commit'
+! stdout 'Restack stack1-feat1 onto main via merge'
+
+git log --oneline stack1-feat2
+stdout 'Restack stack1-feat2 onto stack1-feat1 via merge'
+
+# Test: Performance with large number of branches
+git checkout main
+git commit --allow-empty -m 'Performance test commit'
+
+# Create 3 more branches quickly
+gs branch checkout main
+git add perf1.txt
+gs branch create perf1 -m 'perf1'
+gs branch checkout main
+git add perf2.txt
+gs branch create perf2 -m 'perf2'  
+gs branch checkout main
+git add perf3.txt
+gs branch create perf3 -m 'perf3'
+
+gs repo restack --method=merge
+stderr 'Restacked.*branches'
+
+# Verify all performance branches were handled (they don't need restacking)
+git log --oneline perf1
+stdout 'perf1'
+! stdout 'Restack perf1'
+
+git log --oneline perf2  
+stdout 'perf2'
+! stdout 'Restack perf2'
+
+git log --oneline perf3
+stdout 'perf3'  
+! stdout 'Restack perf3'
+
+-- repo/stack1-1.txt --
+stack 1 feature 1
+-- repo/stack1-2.txt --
+stack 1 feature 2
+-- repo/stack2-1.txt --
+stack 2 feature 1
+-- repo/stack2-2.txt --
+stack 2 feature 2
+-- repo/single.txt --
+single feature
+-- repo/trunk-change.txt --
+trunk modification
+-- repo/perf1.txt --
+performance test 1
+-- repo/perf2.txt --
+performance test 2
+-- repo/perf3.txt --
+performance test 3

@@ -1,0 +1,158 @@
+# Test to detect mixed rebase/merge method usage bugs
+# Verifies that commands consistently use the configured method
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create a complex stack to test method consistency
+git add feat1.txt
+gs branch create feat1 -m 'feat1 commit'
+git add feat2.txt
+gs branch create feat2 -m 'feat2 commit'
+git add feat3.txt
+gs branch create feat3 -m 'feat3 commit'
+
+# Create parallel stacks to test cross-stack consistency
+gs branch checkout main
+git add parallel1.txt
+gs branch create parallel1 -m 'parallel1 commit'
+git add parallel2.txt
+gs branch create parallel2 -m 'parallel2 commit'
+
+# Move trunk forward
+gs branch checkout main
+git add trunk-change.txt
+git commit -m 'New trunk commit'
+
+# Test 1: Repo restack method consistency
+gs repo restack --method=merge
+
+# Verify ALL operations used merge (no mixed methods)
+git log --oneline --all --grep='Restack.*via merge'
+stdout 'Restack feat1 onto main via merge'
+stdout 'Restack feat2 onto feat1 via merge'
+stdout 'Restack feat3 onto feat2 via merge'
+stdout 'Restack parallel1 onto main via merge'
+stdout 'Restack parallel2 onto parallel1 via merge'
+
+# Critical: Ensure NO rebase operations occurred
+git log --oneline --all --grep='via rebase'
+! stdout .
+
+# Test 2: Method consistency check
+git log --oneline --all --grep='Restack.*via merge'
+stdout 'Restack feat1 onto main via merge'
+stdout 'Restack parallel1 onto main via merge'
+
+# Test 3: Stack restack method consistency
+gs branch checkout main
+git commit --allow-empty -m 'Another trunk change'
+
+gs branch checkout feat2
+gs stack restack --method=merge
+
+# Should see new merge operations for the stack
+git log --oneline --all --grep='Restack.*via merge'
+stdout 'Restack feat1 onto main via merge'
+stdout 'Restack feat2 onto feat1 via merge'
+stdout 'Restack feat3 onto feat2 via merge'
+
+# Test 4: Mixed operation detection
+git config spice.restack.method rebase
+gs branch checkout main
+git commit --allow-empty -m 'Third trunk change'
+
+# Manually restack one branch with rebase
+gs branch checkout parallel1
+gs branch restack
+
+# Now test if repo restack maintains method consistency
+gs repo restack --method=merge
+
+# Should have merge operations for branches that needed restacking
+# But the manually rebased branch should not be double-restacked
+git log --oneline parallel1 
+! stdout 'Restack parallel1 onto main via merge.*Restack parallel1 onto main via merge'
+
+# Test 5: Upstack method consistency
+gs branch checkout main
+git commit --allow-empty -m 'Fourth trunk change'
+
+gs branch checkout feat1
+gs upstack restack --method=merge
+
+# All upstack branches should use merge consistently
+git log --oneline feat2
+stdout 'Restack feat2 onto feat1 via merge'
+
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+
+# Neither should have rebase operations
+git log --oneline feat2
+! stdout 'via rebase'
+
+git log --oneline feat3
+! stdout 'via rebase'
+
+# Test 6: Branch onto method consistency
+gs branch checkout feat2
+gs branch onto parallel1 --method=merge
+
+# Both the moved branch and its upstack should use merge
+git log --oneline feat2
+stdout 'Restack feat2 onto parallel1 via merge'
+
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+
+# Test 7: Commit create auto-restack consistency
+gs branch checkout feat1
+git add feat1-change.txt
+gs commit create -m 'feat1 change' --method=merge
+
+# Auto-restacked upstack should use merge
+git log --oneline feat2
+stdout 'Restack feat2 onto feat1 via merge'
+
+# Test 8: Configuration vs flag consistency check
+git config spice.restack.method rebase
+gs branch checkout main
+git commit --allow-empty -m 'Flag override test'
+
+# Flag should override config consistently
+gs repo restack --method=merge
+
+# All new operations should be merge, not rebase
+git log --oneline --all --grep='Restack.*via rebase'
+! stdout .
+
+# Final verification: No mixed method artifacts
+git log --oneline --all --grep='Restack'
+stdout 'via merge'
+! stdout 'via rebase.*via merge'
+! stdout 'via merge.*via rebase'
+
+-- repo/feat1.txt --
+feature 1
+-- repo/feat2.txt --
+feature 2
+-- repo/feat3.txt --
+feature 3
+-- repo/parallel1.txt --
+parallel 1
+-- repo/parallel2.txt --
+parallel 2
+-- repo/trunk-change.txt --
+trunk change
+-- repo/feat1-change.txt --
+feature 1 change

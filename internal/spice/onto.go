@@ -120,19 +120,26 @@ func (s *Service) BranchOnto(ctx context.Context, req *BranchOntoRequest) error 
 			return fmt.Errorf("get current branch: %w", err)
 		}
 		
-		// Checkout the new base (onto)
-		if err := s.wt.Checkout(ctx, req.Onto); err != nil {
-			return fmt.Errorf("checkout onto branch %s: %w", req.Onto, err)
+		// CRITICAL FIX: Get the current tip of the branch being moved
+		branchCommit, err := s.repo.PeelToCommit(ctx, req.Branch)
+		if err != nil {
+			return fmt.Errorf("get branch commit %s: %w", req.Branch, err)
 		}
 		
-		// Merge the original branch into the new base
+		// Checkout the branch being moved (detached HEAD) to merge base into it
+		// This ensures we merge the base INTO the branch, not branch into base
+		if err := s.wt.Checkout(ctx, branchCommit.String()); err != nil {
+			return fmt.Errorf("checkout branch being moved %s: %w", req.Branch, err)
+		}
+		
+		// Merge the new base INTO the branch (correct direction)
 		msg := fmt.Sprintf("Restack %s onto %s via merge", req.Branch, req.Onto)
 		if err := s.wt.Merge(ctx, git.MergeRequest{
-			Source:        req.Branch,
+			Source:        req.Onto, // Merge the BASE into current HEAD (the branch)
 			Message:       msg,
 			NoFastForward: true, // Always create a merge commit
 		}); err != nil {
-			return fmt.Errorf("merge %s into %s: %w", req.Branch, req.Onto, err)
+			return fmt.Errorf("merge %s into %s: %w", req.Onto, req.Branch, err)
 		}
 		
 		// Get the merge commit hash
@@ -142,6 +149,10 @@ func (s *Service) BranchOnto(ctx context.Context, req *BranchOntoRequest) error 
 		}
 		
 		// Update the original branch to point to the merge commit
+		// If the branch was originally checked out, we need to handle that carefully
+		needToRestoreBranch := currentBranch == req.Branch
+		
+		// Stay in detached HEAD or current position to update the branch pointer
 		if err := s.repo.CreateBranch(ctx, git.CreateBranchRequest{
 			Name:  req.Branch,
 			Head:  mergeCommit.String(),
@@ -150,8 +161,14 @@ func (s *Service) BranchOnto(ctx context.Context, req *BranchOntoRequest) error 
 			return fmt.Errorf("update branch pointer: %w", err)
 		}
 		
-		// Switch back to the original branch if needed
-		if currentBranch != req.Branch {
+		// Restore original checkout state
+		if needToRestoreBranch {
+			// If we were originally on the branch being moved, check it out after updating
+			if err := s.wt.Checkout(ctx, req.Branch); err != nil {
+				return fmt.Errorf("checkout moved branch %s: %w", req.Branch, err)
+			}
+		} else if currentBranch != "" {
+			// Restore the original branch
 			if err := s.wt.Checkout(ctx, currentBranch); err != nil {
 				return fmt.Errorf("checkout original branch %s: %w", currentBranch, err)
 			}

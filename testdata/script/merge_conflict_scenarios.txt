@@ -1,0 +1,310 @@
+# Complex merge conflict scenarios with continue/abort testing
+# Tests proper handling of merge conflicts and continuation workflows
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+git config spice.continue.edit false  # Skip editor for testing
+
+gs repo init
+
+# Setup: Create base content for conflicts
+git add shared.txt
+git commit -m 'Add shared file'
+
+# Create feature branch that will conflict
+cp $WORK/feature-version.txt shared.txt
+git add shared.txt
+gs branch create feature -m 'Feature changes shared file'
+
+# Create stack on top of feature
+git add feature2.txt
+gs branch create feature2 -m 'Feature2 on top'
+
+# Modify main to create conflict
+gs branch checkout main
+cp $WORK/main-version.txt shared.txt
+git add shared.txt
+git commit -m 'Main changes shared file'
+
+# Test 1: Basic merge conflict with abort
+gs branch checkout feature
+! gs branch restack --method=merge
+stderr 'conflict'
+
+# Verify we're in merge state
+git status --porcelain
+stdout 'UU shared.txt'
+
+# Test abort functionality
+gs abort
+stderr 'Merge aborted'
+
+# Verify clean state after abort (no merge conflicts)
+git status --porcelain
+! stdout '^UU'
+! stdout '^AA'
+! stdout '^DD'
+
+# Verify we're back on feature branch
+git branch --show-current
+stdout 'feature'
+
+# Test 2: Merge conflict with continue
+! gs branch restack --method=merge
+stderr 'conflict'
+
+# Resolve conflict manually
+cp $WORK/resolved-version.txt shared.txt
+git add shared.txt
+
+# Continue the merge
+gs continue
+stderr 'branch.*restacked'
+
+# Verify merge was completed
+git log --oneline -1 feature
+stdout 'Restack feature onto main via merge'
+
+# Verify resolved content is present
+git show HEAD:shared.txt
+stdout 'resolved shared content with both changes'
+
+# Test 3: Stack restack with conflicts in middle
+gs branch checkout main
+git add conflict2.txt
+git commit -m 'Another main change'
+
+# Create a new stack with conflicts at different levels
+cp $WORK/stack1-version.txt conflict2.txt
+git add conflict2.txt
+gs branch create stack1 -m 'Stack1 changes conflict2'
+
+cp $WORK/stack2-version.txt conflict2.txt  
+git add conflict2.txt
+gs branch create stack2 -m 'Stack2 changes conflict2'
+
+git add stack3.txt
+gs branch create stack3 -m 'Stack3 no conflict'
+
+# Modify main to create conflicts
+gs branch checkout main
+cp $WORK/main2-version.txt conflict2.txt
+git add conflict2.txt
+git commit -m 'Main changes conflict2 again'
+
+# Stack restack with conflict in first branch
+gs branch checkout stack1
+! gs stack restack --method=merge
+stderr 'conflict'
+
+# Resolve and continue (first conflict - stack1)
+cp $WORK/resolved2-version.txt conflict2.txt
+git add conflict2.txt
+! gs continue
+stderr 'conflict'
+
+# Second conflict in stack2 - resolve and continue again
+cp $WORK/resolved2-version.txt conflict2.txt
+git add conflict2.txt
+gs continue
+
+# Now should complete the entire stack restack
+stderr 'branch.*restacked'
+
+# Verify all branches in stack were handled
+git log --oneline stack1
+stdout 'Restack stack1 onto main via merge'
+
+git log --oneline stack2
+stdout 'Restack stack2 onto stack1 via merge'
+
+git log --oneline stack3
+stdout 'Restack stack3 onto stack2 via merge'
+
+# Test 4: Repo restack with multiple conflicts
+gs branch checkout main
+git add multi-conflict.txt
+git commit -m 'Multi conflict setup'
+
+# Create multiple conflicting branches
+cp $WORK/branch1-conflict.txt multi-conflict.txt
+git add multi-conflict.txt
+gs branch create multi1 -m 'Multi1 conflict'
+
+gs branch checkout main
+cp $WORK/branch2-conflict.txt multi-conflict.txt
+git add multi-conflict.txt
+gs branch create multi2 -m 'Multi2 conflict'
+
+# Change main to conflict with both
+gs branch checkout main
+cp $WORK/main-multi-conflict.txt multi-conflict.txt
+git add multi-conflict.txt
+git commit -m 'Main multi conflict'
+
+# Repo restack should hit conflict on first branch
+! gs repo restack --method=merge
+stderr 'conflict'
+
+# Check which branch we're on (should be the first conflicting branch)
+git branch --show-current
+cp stdout $WORK/conflict-branch.txt
+
+# Resolve and continue (first conflict)
+cp $WORK/multi-resolved1.txt multi-conflict.txt
+git add multi-conflict.txt
+! gs continue
+stderr 'conflict'
+
+# Another conflict in multi2 - resolve and continue again
+cp $WORK/multi-resolved2.txt multi-conflict.txt
+git add multi-conflict.txt
+gs continue
+
+# Should now complete repo restack
+stderr 'branch.*restacked'
+
+# Test 5: Complex continuation with branch onto
+gs branch checkout main
+git add onto-conflict.txt
+git commit -m 'Onto conflict setup'
+
+cp $WORK/onto-feature.txt onto-conflict.txt
+git add onto-conflict.txt
+gs branch create onto-feature -m 'Onto feature'
+
+git add onto-stack.txt
+gs branch create onto-stack -m 'Onto stack'
+
+# Create target with conflict
+gs branch checkout main
+cp $WORK/onto-target.txt onto-conflict.txt
+git add onto-conflict.txt
+gs branch create onto-target -m 'Onto target'
+
+# Try to move onto-feature onto onto-target (will conflict)
+gs branch checkout onto-feature
+! gs branch onto onto-target --method=merge
+stderr 'conflict'
+
+# Resolve and continue - should also restack upstack
+cp $WORK/onto-resolved.txt onto-conflict.txt
+git add onto-conflict.txt
+gs continue
+
+# Both branches should be restacked
+git log --oneline onto-feature
+stdout 'Restack onto-feature onto onto-target via merge'
+
+git log --oneline onto-stack
+stdout 'Restack onto-stack onto onto-feature via merge'
+
+# Test 6: Abort during multi-step operation
+gs branch checkout main
+git add abort-test.txt
+git commit -m 'Abort test setup'
+
+cp $WORK/abort-feature.txt abort-test.txt
+git add abort-test.txt
+gs branch create abort-feature -m 'Abort feature'
+
+git add abort-stack1.txt
+gs branch create abort-stack1 -m 'Abort stack1'
+
+git add abort-stack2.txt
+gs branch create abort-stack2 -m 'Abort stack2'
+
+# Create conflict on main
+gs branch checkout main
+cp $WORK/abort-main.txt abort-test.txt
+git add abort-test.txt
+git commit -m 'Abort main change'
+
+# Start stack restack
+gs branch checkout abort-feature
+! gs stack restack --method=merge
+stderr 'conflict'
+
+# Abort instead of resolving
+gs abort
+stderr 'Merge aborted'
+
+# Verify clean state and proper branch
+git status --porcelain
+! stdout .
+
+git branch --show-current
+stdout 'abort-feature'
+
+# Test 7: Continue/abort state consistency
+git status --porcelain
+! stdout .
+
+# No merge or rebase should be in progress
+! gs continue 2>stderr || true
+stderr 'no.*merge.*in progress'
+
+! gs abort 2>stderr || true  
+stderr 'no.*merge.*in progress'
+
+-- repo/shared.txt --
+original shared content
+-- feature-version.txt --
+feature version of shared content
+-- main-version.txt --
+main version of shared content
+-- resolved-version.txt --
+resolved shared content with both changes
+-- repo/feature2.txt --
+feature2 content
+-- repo/conflict2.txt --
+original conflict2 content
+-- stack1-version.txt --
+stack1 version of conflict2
+-- stack2-version.txt --
+stack2 version of conflict2
+-- main2-version.txt --
+main version of conflict2
+-- resolved2-version.txt --
+resolved conflict2 content
+-- repo/stack3.txt --
+stack3 content
+-- repo/multi-conflict.txt --
+original multi conflict content
+-- branch1-conflict.txt --
+branch1 conflict content
+-- branch2-conflict.txt --
+branch2 conflict content
+-- main-multi-conflict.txt --
+main multi conflict content
+-- multi-resolved1.txt --
+resolved multi conflict 1
+-- multi-resolved2.txt --
+resolved multi conflict 2
+-- repo/onto-conflict.txt --
+original onto conflict content
+-- onto-feature.txt --
+onto feature content
+-- onto-target.txt --
+onto target content
+-- onto-resolved.txt --
+resolved onto conflict content
+-- repo/onto-stack.txt --
+onto stack content
+-- repo/abort-test.txt --
+original abort test content
+-- abort-feature.txt --
+abort feature content
+-- abort-main.txt --
+abort main content
+-- repo/abort-stack1.txt --
+abort stack1 content
+-- repo/abort-stack2.txt --
+abort stack2 content

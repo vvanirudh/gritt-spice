@@ -43,6 +43,35 @@ func (m *MockGitRepository) EXPECT() *MockGitRepositoryMockRecorder {
 	return m.recorder
 }
 
+// CommitSubject mocks base method.
+func (m *MockGitRepository) CommitSubject(ctx context.Context, commitish string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitSubject", ctx, commitish)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CommitSubject indicates an expected call of CommitSubject.
+func (mr *MockGitRepositoryMockRecorder) CommitSubject(ctx, commitish any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitSubject", reflect.TypeOf((*MockGitRepository)(nil).CommitSubject), ctx, commitish)
+}
+
+// CreateBranch mocks base method.
+func (m *MockGitRepository) CreateBranch(arg0 context.Context, arg1 git.CreateBranchRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBranch", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateBranch indicates an expected call of CreateBranch.
+func (mr *MockGitRepositoryMockRecorder) CreateBranch(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBranch", reflect.TypeOf((*MockGitRepository)(nil).CreateBranch), arg0, arg1)
+}
+
 // DeleteBranch mocks base method.
 func (m *MockGitRepository) DeleteBranch(arg0 context.Context, arg1 string, arg2 git.BranchDeleteOptions) error {
 	m.ctrl.T.Helper()
@@ -242,6 +271,20 @@ func (m *MockGitWorktree) EXPECT() *MockGitWorktreeMockRecorder {
 	return m.recorder
 }
 
+// Checkout mocks base method.
+func (m *MockGitWorktree) Checkout(arg0 context.Context, arg1 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Checkout", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Checkout indicates an expected call of Checkout.
+func (mr *MockGitWorktreeMockRecorder) Checkout(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Checkout", reflect.TypeOf((*MockGitWorktree)(nil).Checkout), arg0, arg1)
+}
+
 // CurrentBranch mocks base method.
 func (m *MockGitWorktree) CurrentBranch(ctx context.Context) (string, error) {
 	m.ctrl.T.Helper()
@@ -257,6 +300,63 @@ func (mr *MockGitWorktreeMockRecorder) CurrentBranch(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentBranch", reflect.TypeOf((*MockGitWorktree)(nil).CurrentBranch), ctx)
 }
 
+// Merge mocks base method.
+func (m *MockGitWorktree) Merge(arg0 context.Context, arg1 git.MergeRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Merge", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Merge indicates an expected call of Merge.
+func (mr *MockGitWorktreeMockRecorder) Merge(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Merge", reflect.TypeOf((*MockGitWorktree)(nil).Merge), arg0, arg1)
+}
+
+// MergeAbort mocks base method.
+func (m *MockGitWorktree) MergeAbort(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeAbort", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MergeAbort indicates an expected call of MergeAbort.
+func (mr *MockGitWorktreeMockRecorder) MergeAbort(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeAbort", reflect.TypeOf((*MockGitWorktree)(nil).MergeAbort), arg0)
+}
+
+// MergeContinue mocks base method.
+func (m *MockGitWorktree) MergeContinue(arg0 context.Context, arg1 *git.MergeContinueOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeContinue", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MergeContinue indicates an expected call of MergeContinue.
+func (mr *MockGitWorktreeMockRecorder) MergeContinue(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeContinue", reflect.TypeOf((*MockGitWorktree)(nil).MergeContinue), arg0, arg1)
+}
+
+// MergeState mocks base method.
+func (m *MockGitWorktree) MergeState(arg0 context.Context) (*git.MergeState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeState", arg0)
+	ret0, _ := ret[0].(*git.MergeState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeState indicates an expected call of MergeState.
+func (mr *MockGitWorktreeMockRecorder) MergeState(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeState", reflect.TypeOf((*MockGitWorktree)(nil).MergeState), arg0)
+}
+
 // Rebase mocks base method.
 func (m *MockGitWorktree) Rebase(arg0 context.Context, arg1 git.RebaseRequest) error {
 	m.ctrl.T.Helper()
@@ -269,6 +369,21 @@ func (m *MockGitWorktree) Rebase(arg0 context.Context, arg1 git.RebaseRequest) e
 func (mr *MockGitWorktreeMockRecorder) Rebase(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rebase", reflect.TypeOf((*MockGitWorktree)(nil).Rebase), arg0, arg1)
+}
+
+// RebaseState mocks base method.
+func (m *MockGitWorktree) RebaseState(arg0 context.Context) (*git.RebaseState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RebaseState", arg0)
+	ret0, _ := ret[0].(*git.RebaseState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RebaseState indicates an expected call of RebaseState.
+func (mr *MockGitWorktreeMockRecorder) RebaseState(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebaseState", reflect.TypeOf((*MockGitWorktree)(nil).RebaseState), arg0)
 }
 
 // MockStore is a mock of Store interface.

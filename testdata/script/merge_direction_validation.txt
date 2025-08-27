@@ -1,0 +1,231 @@
+# Test to validate correct merge direction
+# Ensures new base is merged INTO current branch, not vice versa
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create feature branch with distinctive commits
+git add feat-file1.txt
+gs branch create feature -m 'Feature: Add file1'
+git add feat-file2.txt
+git commit -m 'Feature: Add file2'
+git add feat-file3.txt  
+git commit -m 'Feature: Add file3'
+
+# Create new base with different commits
+gs branch checkout main
+git add base-file1.txt
+git commit -m 'Base: Add base file1'
+git add base-file2.txt
+git commit -m 'Base: Add base file2'
+
+# Test 1: Basic merge direction validation
+gs branch checkout feature
+gs branch restack --method=merge
+
+# CRITICAL: Verify correct merge direction for restacking
+# When restacking feature onto main, we merge main INTO feature
+# First parent should be the original feature branch tip
+# Second parent should be main
+
+# Get the two parents of the merge commit
+git rev-list --parents HEAD -1
+cp stdout $WORK/merge-parents.txt
+
+# Verify main's SHA appears in the merge parents (confirming it was merged IN)
+git rev-parse main
+cp stdout $WORK/main-sha.txt
+
+# Check main appears as a parent in the merge commit
+git rev-list --parents HEAD -1
+stdout '8bb2f43'
+
+# Critical: First parent should NOT be main (confirms direction)
+git rev-parse HEAD^1
+cp stdout $WORK/first-parent.txt
+
+# First parent should NOT equal main
+git rev-parse main
+! cmp stdout $WORK/first-parent.txt
+
+# Test 2: CRITICAL - Verify upstack isolation
+# Main's history should NOT contain feature commits (upstack isolation)
+git log --oneline main
+! stdout 'Feature: Add file3'
+! stdout 'Feature: Add file2'
+! stdout 'Feature: Add file1'
+
+# Main should only have its own commits
+stdout 'Base: Add base file2'
+stdout 'Base: Add base file1'
+stdout 'Initial commit'
+
+# Test 3: Feature commits should be preserved and accessible
+# All original feature commits should be reachable from merge commit
+git log --oneline feature
+stdout 'Feature: Add file3'
+stdout 'Feature: Add file2'
+stdout 'Feature: Add file1'
+
+# Base commits should also be in history
+stdout 'Base: Add base file2'
+stdout 'Base: Add base file1'
+stdout 'Initial commit'
+
+# Test 4: Verify files from both branches exist
+git ls-files
+stdout 'feat-file1.txt'
+stdout 'feat-file2.txt'
+stdout 'feat-file3.txt'
+stdout 'base-file1.txt'
+stdout 'base-file2.txt'
+
+# Test 5: Check merge commit message indicates correct direction
+git log --oneline -1 feature
+stdout 'Restack feature onto main via merge'
+
+# Test 6: Validate commit graph structure
+# The merge should create a diamond pattern with main as one parent
+git log --graph --oneline feature
+stdout '\*.*Restack feature onto main via merge'
+stdout '|\\\\'  # Merge commit should show branching
+stdout '\* .*Feature: Add file3'
+stdout '\* .*Base: Add base file2'
+
+# Test 7: Test with branch onto operation
+gs branch checkout main
+git add another-base.txt
+git commit -m 'Another base commit'
+
+# Move feature onto new commit
+gs branch checkout feature
+gs branch onto main --method=merge
+
+# Verify direction: main should be merged into feature branch
+git log --oneline -1 feature
+stdout 'Restack feature onto main via merge'
+
+# New base commit should be first parent  
+# Since feature is now on main, HEAD~1 should be the old main position
+git rev-parse HEAD~1
+cp stdout $WORK/new-first-parent.txt
+
+# The "Another base commit" should be in the first parent
+git log --oneline HEAD~1 -1
+stdout 'Restack feature onto main via merge'
+
+# Test 8: Complex stack merge direction
+git add stack2.txt
+gs branch create stack2 -m 'Stack2 commit'
+git add stack3.txt
+gs branch create stack3 -m 'Stack3 commit'
+
+gs branch checkout main
+git commit --allow-empty -m 'Force restack'
+
+gs stack restack --method=merge
+
+# Each branch should have new base as first parent of merge commit
+gs branch checkout stack2
+git rev-parse HEAD~1
+cp stdout $WORK/stack2-first-parent.txt
+
+# With correct merge direction, first parent should NOT be feature (the new base)  
+# First parent should be original stack2, second parent should be feature
+git rev-parse feature
+! cmp stdout $WORK/stack2-first-parent.txt
+
+gs branch checkout stack3
+git rev-parse HEAD~1
+cp stdout $WORK/stack3-first-parent.txt
+
+# With correct merge direction, first parent should NOT be stack2 (the new base)
+# First parent should be original stack3, second parent should be stack2  
+git rev-parse stack2
+! cmp stdout $WORK/stack3-first-parent.txt
+
+# Test 9: Verify merge direction with conflicts
+gs branch checkout main
+git add conflict.txt
+git commit -m 'Main conflict setup'
+
+cp $WORK/conflict-feature.txt conflict.txt
+git add conflict.txt
+gs branch create conflict-test -m 'Feature conflict'
+
+# Modify main to create conflict
+gs branch checkout main
+cp $WORK/conflict-main.txt conflict.txt
+git add conflict.txt
+git commit -m 'Main conflict change'
+
+# Test merge direction even with conflicts
+gs branch checkout conflict-test
+! gs branch restack --method=merge
+stderr 'conflict'
+
+# Even during conflict, the merge should be in correct direction
+# Check that we're merging main INTO conflict-test (not vice versa)
+git status --porcelain
+stdout 'UU conflict.txt'
+
+# During conflict, we should be on the branch being restacked (conflict-test) 
+# With correct merge direction, HEAD should be conflict-test, not main
+git rev-parse HEAD
+cp stdout $WORK/current-head.txt
+
+git rev-parse conflict-test
+cp stdout $WORK/conflict-test-sha.txt
+
+# We should be positioned on the conflict-test branch during merge conflict
+cmp $WORK/current-head.txt $WORK/conflict-test-sha.txt
+
+# Abort the conflict for cleanup
+gs abort
+
+# Test 10: Verify preservation of original branch content
+gs branch checkout feature
+git show HEAD~0:feat-file1.txt
+stdout 'feature file 1 content'
+
+git show HEAD~0:feat-file2.txt
+stdout 'feature file 2 content'
+
+git show HEAD~0:feat-file3.txt
+stdout 'feature file 3 content'
+
+# Base content should also be present
+git show HEAD~0:base-file1.txt
+stdout 'base file 1 content'
+
+-- repo/feat-file1.txt --
+feature file 1 content
+-- repo/feat-file2.txt --
+feature file 2 content
+-- repo/feat-file3.txt --
+feature file 3 content
+-- repo/base-file1.txt --
+base file 1 content
+-- repo/base-file2.txt --
+base file 2 content
+-- repo/another-base.txt --
+another base content
+-- repo/stack2.txt --
+stack 2 content
+-- repo/stack3.txt --
+stack 3 content
+-- repo/conflict.txt --
+original conflict content
+-- conflict-feature.txt --
+feature version of conflict
+-- conflict-main.txt --
+main version of conflict

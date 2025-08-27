@@ -1,0 +1,209 @@
+# Comprehensive test for repo sync with merge method restacking
+# Tests sync operation respects merge method configuration
+
+as 'Test User <test@example.com>'
+at 2024-05-18T13:59:12Z
+
+cd repo
+git init
+git commit --allow-empty -m 'Initial commit'
+
+# Set up a fake GitHub remote
+shamhub init
+shamhub new origin alice/example.git
+shamhub register alice
+git push origin main
+
+env SHAMHUB_USERNAME=alice
+gs auth login
+
+# Configure to use merge for restacking
+git config spice.restack.method merge
+
+gs repo init
+
+# Create a complex stack for testing
+git add feature1.txt
+gs branch create feature1 -m 'Add feature1'
+
+git add feature2.txt
+gs branch create feature2 -m 'Add feature2'
+
+git add feature3.txt
+gs branch create feature3 -m 'Add feature3'
+
+# Create a parallel stack
+gs branch checkout main
+git add parallel1.txt
+gs branch create parallel1 -m 'Add parallel1'
+
+git add parallel2.txt
+gs branch create parallel2 -m 'Add parallel2'
+
+# Submit and merge some PRs
+gs branch checkout feature1
+gs branch submit --fill
+stderr 'Created #'
+
+gs branch checkout parallel1  
+gs branch submit --fill
+stderr 'Created #'
+
+# Merge PRs on the server side
+shamhub merge alice/example 1
+shamhub merge alice/example 2
+
+# Test: Basic sync with restack using merge method
+gs repo sync --restack
+stderr 'feature1: #1 was merged'
+stderr 'parallel1: #2 was merged'
+
+# Verify remaining stacks were restacked using merge method
+git log --oneline feature2
+stdout 'Restack feature2 onto main via merge'
+stdout 'Add feature2'
+
+git log --oneline feature3
+stdout 'Restack feature3 onto feature2 via merge'
+stdout 'Add feature3'
+
+git log --oneline parallel2
+stdout 'Restack parallel2 onto main via merge'
+stdout 'Add parallel2'
+
+# Verify merge commits were created
+git rev-list --parents feature2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feature3 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents parallel2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test: Method consistency check - no rebase operations during sync
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Test: Sync without creating new commits (already restacked)
+gs branch checkout main
+git commit --allow-empty -m 'Force another sync'
+
+gs repo sync --restack
+
+# Should use merge from config (already set to merge)
+git log --oneline feature2
+stdout 'Restack feature2 onto main via merge'
+
+# Test: Sync without explicit restack method (should use config)
+git config spice.restack.method merge
+gs branch checkout main
+git commit --allow-empty -m 'Another trunk change'
+
+gs repo sync --restack
+
+# Should use merge from config
+git log --oneline feature2
+stdout 'Restack feature2 onto main via merge'
+
+# Test: Mixed scenario - some branches already up-to-date
+git add mixed-feature.txt
+gs branch create mixed-feature -m 'Mixed feature'
+gs branch submit --fill
+shamhub merge alice/example 3
+
+# Sync should handle mixed scenarios correctly
+gs repo sync --restack
+stderr 'mixed-feature: #3 was merged'
+
+# Remaining branches should be restacked with merge
+git log --oneline feature3
+stdout 'Restack feature3 onto feature2 via merge'
+
+# Test: Simple additional branches
+gs branch checkout main
+git add simple-feature.txt
+gs branch create simple-feature -m 'Simple feature'
+gs branch submit --fill
+shamhub merge alice/example 4
+
+# Sync should handle simple scenarios
+gs repo sync --restack
+stderr 'simple-feature: #4 was merged'
+
+# Test: Performance with many branches
+# Create 5 more branches quickly  
+gs branch checkout main
+git add perf1.txt
+gs branch create perf1 -m 'Perf 1'
+git add perf2.txt
+gs branch create perf2 -m 'Perf 2' 
+git add perf3.txt
+gs branch create perf3 -m 'Perf 3'
+git add perf4.txt
+gs branch create perf4 -m 'Perf 4'
+git add perf5.txt
+gs branch create perf5 -m 'Perf 5'
+
+gs repo sync --restack
+
+# Performance branches should be on current main (no restacking needed)
+git log --oneline perf1
+stdout 'Perf 1'
+! stdout 'Restack perf1'
+
+git log --oneline perf5
+stdout 'Perf 5'
+! stdout 'Restack perf5'
+
+# Test: Verify final state - performance branches form a stack
+gs log short
+stderr 'perf5'
+stderr 'perf4'
+stderr 'perf3'
+stderr 'perf2'
+stderr 'perf1'
+
+# Check that sync operations used merge method consistently
+git log --oneline --all --grep='Restack.*via merge'
+stdout 'Restack.*via merge'
+
+# Verify no rebase operations occurred
+git log --oneline --all --grep='rebase'
+! stdout .
+
+-- repo/feature1.txt --
+Contents of feature1
+
+-- repo/feature2.txt --
+Contents of feature2
+
+-- repo/feature3.txt --
+Contents of feature3
+
+-- repo/parallel1.txt --
+Contents of parallel1
+
+-- repo/parallel2.txt --
+Contents of parallel2
+
+-- repo/mixed-feature.txt --
+Mixed feature content
+
+-- repo/simple-feature.txt --
+Simple feature content
+
+-- repo/perf1.txt --
+Performance test 1
+
+-- repo/perf2.txt --
+Performance test 2
+
+-- repo/perf3.txt --
+Performance test 3
+
+-- repo/perf4.txt --
+Performance test 4
+
+-- repo/perf5.txt --
+Performance test 5

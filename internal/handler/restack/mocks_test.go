@@ -151,3 +151,32 @@ func (mr *MockServiceMockRecorder) Restack(ctx, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Restack", reflect.TypeOf((*MockService)(nil).Restack), ctx, name)
 }
+
+// RestackRescue mocks base method.
+func (m *MockService) RestackRescue(ctx context.Context, req spice.RestackRescueRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RestackRescue", ctx, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RestackRescue indicates an expected call of RestackRescue.
+func (mr *MockServiceMockRecorder) RestackRescue(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestackRescue", reflect.TypeOf((*MockService)(nil).RestackRescue), ctx, req)
+}
+
+// RestackWithOptions mocks base method.
+func (m *MockService) RestackWithOptions(ctx context.Context, name string, opts spice.RestackOptions) (*spice.RestackResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RestackWithOptions", ctx, name, opts)
+	ret0, _ := ret[0].(*spice.RestackResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RestackWithOptions indicates an expected call of RestackWithOptions.
+func (mr *MockServiceMockRecorder) RestackWithOptions(ctx, name, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestackWithOptions", reflect.TypeOf((*MockService)(nil).RestackWithOptions), ctx, name, opts)
+}

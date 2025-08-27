@@ -1,0 +1,184 @@
+# Comprehensive test for upstack onto with merge method
+# Tests moving multiple branches with merge-based restacking
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+# Set merge as the restack method
+git config spice.restack.method merge
+
+gs repo init
+
+# Create primary stack
+git add feat1.txt
+gs branch create feat1 -m 'feat1 commit'
+git add feat2.txt
+gs branch create feat2 -m 'feat2 commit'
+git add feat3.txt
+gs branch create feat3 -m 'feat3 commit'
+git add feat4.txt
+gs branch create feat4 -m 'feat4 commit'
+
+# Create destination stack
+gs branch checkout main
+git add dest1.txt
+gs branch create dest1 -m 'dest1 commit'
+git add dest2.txt
+gs branch create dest2 -m 'dest2 commit'
+
+# Test: Move upstack onto different base
+gs branch checkout feat2
+gs upstack onto dest1 --method=merge
+
+# Verify feat2 and all upstack branches moved with merge
+git log --oneline feat2
+stdout 'Restack feat2 onto dest1 via merge'
+stdout 'feat2 commit'
+
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+stdout 'feat3 commit'
+
+git log --oneline feat4
+stdout 'Restack feat4 onto feat3 via merge'
+stdout 'feat4 commit'
+
+# Verify all moved branches have merge commits
+git rev-list --parents feat2 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat3 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+git rev-list --parents feat4 -1
+stdout '^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+$'
+
+# Test: Method consistency - no rebase operations
+git log --oneline --all --grep='rebase'
+! stdout .
+
+# Test: Branch relationships updated correctly
+gs log short
+stderr 'feat4'
+stderr 'feat3'
+stderr 'feat2'
+stderr 'dest1'
+
+# Test: Move upstack to trunk
+gs branch checkout feat3
+gs upstack onto main --method=merge
+
+# Verify feat3 structure after upstack onto main
+git log --oneline feat3
+stdout 'Restack feat3 onto feat2 via merge'
+stdout 'feat3 commit'
+
+git log --oneline feat4  
+stdout 'Restack feat4 onto feat3 via merge'
+stdout 'feat4 commit'
+
+# Test: Interactive prompt for destination
+env ROBOT_INPUT=$WORK/robot.golden ROBOT_OUTPUT=$WORK/robot
+
+gs branch checkout feat1
+gs upstack onto --method=merge
+
+cmpenv $WORK/robot $WORK/robot.golden
+
+# Verify the selected destination was used (feat1 itself wouldn't change)
+git log --oneline feat1
+stdout 'feat1 commit'
+
+# Test: Configuration override
+git config spice.restack.method rebase
+gs branch checkout dest2
+gs upstack onto main --method=merge
+
+# Should still work despite rebase config (dest2 moved but didn't need restacking)
+git log --oneline dest2
+stdout 'dest2 commit'
+
+# Test: Move single branch (no upstack)
+gs branch checkout main
+git add single.txt
+gs branch create single -m 'single commit'
+
+gs branch checkout single
+gs upstack onto dest1 --method=merge
+
+# Should work with just one branch
+git log --oneline single
+stdout 'Restack single onto dest1 via merge'
+
+# Test: Complex stack movement with conflicts
+gs branch checkout main
+git add conflict-base.txt
+gs branch create conflict-base -m 'conflict base'
+
+# Create branches that will conflict
+cp $WORK/conflict1.txt conflict-base.txt
+git add conflict-base.txt
+gs branch create conflict1 -m 'conflict1 change'
+
+cp $WORK/conflict2.txt conflict-base.txt
+git add conflict-base.txt
+gs branch create conflict2 -m 'conflict2 change'
+
+# Move back and modify trunk to create conflict
+gs branch checkout main
+cp $WORK/trunk-conflict.txt conflict-base.txt
+git add conflict-base.txt
+git commit -m 'trunk conflict change'
+
+# Test upstack onto with conflict (should fail gracefully)
+gs branch checkout conflict1
+! gs upstack onto main --method=merge
+stderr 'conflict'
+
+# Clean up the conflict state
+gs abort
+
+# Test: Verify clean state after all successful operations
+gs branch checkout feat1
+git status --porcelain
+! stdout .
+
+-- repo/feat1.txt --
+feature 1
+-- repo/feat2.txt --
+feature 2
+-- repo/feat3.txt --
+feature 3
+-- repo/feat4.txt --
+feature 4
+-- repo/dest1.txt --
+destination 1
+-- repo/dest2.txt --
+destination 2
+-- repo/single.txt --
+single feature
+-- repo/conflict-base.txt --
+base content
+-- conflict1.txt --
+conflict1 content
+-- conflict2.txt --
+conflict2 content
+-- trunk-conflict.txt --
+trunk conflict content
+-- robot.golden --
+===
+> Select a branch to move onto: 
+>   ┏━□ dest2
+>   ┣━□ feat2
+> ┏━┻□ dest1
+> ┣━□ feat1
+> ┃ ┏━□ feat4
+> ┣━┻□ feat3
+> main ◀
+>
+> Moving the upstack of feat1 onto another branch
+"dest1"
