@@ -113,7 +113,7 @@ func (cmd *commitSplitCmd) splitHead(
 	}()
 
 	// Run the multi-way split loop.
-	if err := cmd.splitLoop(ctx, log, view, wt, head, parent, originalMessage); err != nil {
+	if err := cmd.splitLoop(ctx, log, view, repo, wt, head, parent, originalMessage); err != nil {
 		return err
 	}
 
@@ -226,6 +226,7 @@ func (cmd *commitSplitCmd) splitLoop(
 	ctx context.Context,
 	log *silog.Logger,
 	view ui.View,
+	repo *git.Repository,
 	wt *git.Worktree,
 	original git.Hash,
 	parent git.Hash,
@@ -279,16 +280,10 @@ func (cmd *commitSplitCmd) splitLoop(
 		}
 		parent = newHead
 
-		// Reset index to remaining changes from original.
-		if err := wt.Reset(ctx, original.String(), git.ResetOptions{
-			Paths: []string{"."},
-		}); err != nil {
-			return fmt.Errorf("reset index: %w", err)
-		}
-
-		// Check if there are remaining changes.
+		// Check if there are remaining changes by comparing HEAD to original.
+		// If they differ, there are more changes to split.
 		var hasRemaining bool
-		for _, err := range wt.DiffWork(ctx) {
+		for _, err := range repo.DiffTree(ctx, parent.String(), original.String()) {
 			if err != nil {
 				return fmt.Errorf("check remaining: %w", err)
 			}

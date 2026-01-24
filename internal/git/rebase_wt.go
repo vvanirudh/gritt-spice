@@ -344,14 +344,16 @@ func (w *Worktree) RebaseEdit(ctx context.Context, commit Hash) error {
 	shortHash := commit.Short()
 
 	// The sequence editor command replaces "pick <hash>" with "edit <hash>".
-	// We use a sed command that matches the short hash prefix.
-	sedCmd := fmt.Sprintf(
-		"sed -i.bak 's/^pick %s/edit %s/' \"$1\"",
+	// Git passes the todo file path as an argument to the editor.
+	// With sh -c, we need to use -- to separate the script from arguments,
+	// then use $1 to reference the file path.
+	seqEditor := fmt.Sprintf(
+		`sh -c 'sed -i.bak "s/^pick %s/edit %s/" "$1"' --`,
 		shortHash, shortHash,
 	)
 
 	args := []string{
-		"-c", "sequence.editor=sh -c '" + sedCmd + "'",
+		"-c", "sequence.editor=" + seqEditor,
 		"rebase", "--interactive", commit.String() + "^",
 	}
 
