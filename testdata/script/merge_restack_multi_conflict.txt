@@ -1,0 +1,96 @@
+# Multi-branch merge restack with conflict and continuation
+
+as 'Test <test@example.com>'
+at '2024-05-27T18:24:42Z'
+
+mkdir repo
+cd repo
+git init
+git add init.txt
+git commit -m 'Initial commit'
+gs repo init
+
+# Configure merge-based restacking
+git config spice.restack.method merge
+
+# Create a 3-branch stack
+cp $WORK/extra/init.feat1.txt init.txt
+git add init.txt
+gs bc feat1 -m feat1
+
+cp $WORK/extra/init.feat2.txt init.txt
+git add init.txt
+gs bc feat2 -m feat2
+
+cp $WORK/extra/init.feat3.txt init.txt
+git add init.txt
+gs bc feat3 -m feat3
+
+# Go back to main and make conflicting change
+gs trunk
+cp $WORK/extra/init.new.txt init.txt
+git add init.txt
+git commit -m 'Change init on trunk'
+
+# Restack the entire stack - should hit conflict on feat1
+gs branch checkout feat1
+! gs upstack restack
+stderr 'There was a conflict while merging'
+stderr 'gs continue'
+
+# Resolve first conflict on feat1
+cp $WORK/extra/init.resolved1.txt init.txt
+git add init.txt
+env EDITOR=true
+! gs continue
+stderr 'There was a conflict while merging'
+
+# Resolve second conflict on feat2
+cp $WORK/extra/init.resolved2.txt init.txt
+git add init.txt
+env EDITOR=true
+! gs continue
+stderr 'There was a conflict while merging'
+
+# Resolve third conflict on feat3
+cp $WORK/extra/init.resolved3.txt init.txt
+git add init.txt
+env EDITOR=true
+gs continue
+
+# Should complete restacking
+stderr 'feat3: branch does not need to be restacked'
+
+# Verify all branches have merge commits
+gs branch checkout feat1
+git log --oneline --graph feat1
+stdout 'Restack: merge base into feat1'
+
+gs branch checkout feat3
+git log --oneline --graph feat3
+stdout 'Restack: merge base into feat3'
+stdout 'Restack: merge base into feat2'
+
+-- repo/init.txt --
+initial
+
+-- extra/init.feat1.txt --
+feature 1
+
+-- extra/init.feat2.txt --
+feature 2
+
+-- extra/init.feat3.txt --
+feature 3
+
+-- extra/init.new.txt --
+changed on trunk
+
+-- extra/init.resolved1.txt --
+resolved feature 1
+
+-- extra/init.resolved2.txt --
+resolved feature 2
+
+-- extra/init.resolved3.txt --
+resolved feature 3

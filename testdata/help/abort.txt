@@ -1,21 +1,13 @@
-Usage: gs branch (b) track (tr) [<branch>] [flags]
+Usage: gs abort [flags]
 
-Track a branch
+Abort an interrupted operation
 
-A branch must be tracked to be able to run gs operations on it. Use 'gs branch
-create' to automatically track new branches.
+Cancels an ongoing git-spice operation that was interrupted by a git rebase or
+git merge. For example, if 'gs upstack restack' encounters a conflict, cancel
+the operation with 'gs abort', going back to the state before the operation.
 
-The base is guessed by comparing against other tracked branches. Use --base to
-specify a base explicitly.
-
-Use 'gs downstack track' from the topmost branch to track a manully created
-stack of branches at once.
-
-Arguments:
-  [<branch>]    Name of the branch to track
-
-Flags:
-  -b, --base=BRANCH    Base branch this merges into
+The command works with both rebase and merge operations, automatically detecting
+which one is in progress.
 
 Global Flags:
   -h, --help                       Show help for the command

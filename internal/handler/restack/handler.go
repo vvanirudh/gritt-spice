@@ -196,13 +196,26 @@ loop:
 	for _, branch := range branchesToRestack {
 		res, err := h.Service.Restack(ctx, branch)
 		if err != nil {
-			var rebaseErr *git.RebaseInterruptError
+			var (
+				rebaseErr *git.RebaseInterruptError
+				mergeErr  *git.MergeInterruptError
+			)
 			switch {
 			case errors.As(err, &rebaseErr):
 				// If the rebase is interrupted by a conflict,
 				// we'll resume by re-running this command.
 				return 0, h.Service.RebaseRescue(ctx, spice.RebaseRescueRequest{
 					Err:     rebaseErr,
+					Command: req.ContinueCommand,
+					Branch:  req.Branch,
+					Message: fmt.Sprintf("interrupted: restack branch %q", branch),
+				})
+
+			case errors.As(err, &mergeErr):
+				// If the merge is interrupted by a conflict,
+				// we'll resume by re-running this command.
+				return 0, h.Service.RebaseRescue(ctx, spice.RebaseRescueRequest{
+					Err:     mergeErr,
 					Command: req.ContinueCommand,
 					Branch:  req.Branch,
 					Message: fmt.Sprintf("interrupted: restack branch %q", branch),

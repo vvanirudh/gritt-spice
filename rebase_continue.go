@@ -29,6 +29,9 @@ func (*rebaseContinueCmd) Help() string {
 		The command can be used in place of 'git rebase --continue'
 		even if a git-spice operation is not currently in progress.
 
+		Note: You can also use 'gs continue' which works for both
+		rebase and merge operations.
+
 		Use the --no-edit flag to continue without opening an editor.
 		Make --no-edit the default by setting 'spice.rebaseContinue.edit' to false
 		and use --edit to override it.

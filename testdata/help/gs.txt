@@ -3,14 +3,18 @@ Usage: gs <command> [flags]
 gs (git-spice) is a command line tool for stacking Git branches.
 
 Global Flags:
-  -h, --help           Show help for the command
-      --version        Print version information and quit
-  -v, --verbose        Enable verbose output ($GIT_SPICE_VERBOSE)
-  -C, --dir=DIR        Change to DIR before doing anything
-      --[no-]prompt    Whether to prompt for missing information
+  -h, --help                       Show help for the command
+      --version                    Print version information and quit
+  -v, --verbose                    Enable verbose output ($GIT_SPICE_VERBOSE)
+  -C, --dir=DIR                    Change to DIR before doing anything
+      --[no-]prompt                Whether to prompt for missing information
+      --restack-method="rebase"    Method to use for restacking (rebase or
+                                   merge) (🔧 spice.restack.method)
 
 Commands:
-  version    Print version information and quit
+  continue    Continue an interrupted operation
+  abort       Abort an interrupted operation
+  version     Print version information and quit
 
 Shell
   shell completion    Generate shell completion script

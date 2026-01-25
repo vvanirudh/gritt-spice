@@ -55,7 +55,9 @@ type GitRepository interface {
 type GitWorktree interface {
 	// CurrentBranch returns the name of the current branch.
 	CurrentBranch(ctx context.Context) (string, error)
+	CheckoutBranch(ctx context.Context, branch string) error
 	Rebase(context.Context, git.RebaseRequest) error
+	Merge(context.Context, git.MergeRequest) error
 }
 
 var (
@@ -95,11 +97,12 @@ var _ Store = (*state.Store)(nil)
 // It combines together lower level pieces like access to the git repository
 // and the spice state.
 type Service struct {
-	repo   GitRepository // required
-	wt     GitWorktree   // required
-	store  Store         // required
-	log    *silog.Logger
-	forges *forge.Registry
+	repo          GitRepository // required
+	wt            GitWorktree   // required
+	store         Store         // required
+	log           *silog.Logger
+	forges        *forge.Registry
+	restackMethod RestackMethod
 }
 
 // NewService builds a new service operating on the given repository and store.
@@ -110,7 +113,19 @@ func NewService(
 	forges *forge.Registry,
 	log *silog.Logger,
 ) *Service {
-	return newService(repo, wt, store, forges, log)
+	return newService(repo, wt, store, forges, log, RestackMethodRebase)
+}
+
+// NewServiceWithRestackMethod builds a new service with a specified restack method.
+func NewServiceWithRestackMethod(
+	repo GitRepository,
+	wt GitWorktree,
+	store Store,
+	forges *forge.Registry,
+	log *silog.Logger,
+	restackMethod RestackMethod,
+) *Service {
+	return newService(repo, wt, store, forges, log, restackMethod)
 }
 
 func newService(
@@ -119,13 +134,15 @@ func newService(
 	store Store,
 	forges *forge.Registry,
 	log *silog.Logger,
+	restackMethod RestackMethod,
 ) *Service {
 	return &Service{
-		repo:   repo,
-		wt:     wt,
-		store:  store,
-		log:    log,
-		forges: forges,
+		repo:          repo,
+		wt:            wt,
+		store:         store,
+		log:           log,
+		forges:        forges,
+		restackMethod: restackMethod,
 	}
 }
 
