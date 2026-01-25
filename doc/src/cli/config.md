@@ -295,8 +295,9 @@ $$gs repo restack$$, and $$gs branch onto$$.
 - `rebase` (default): use git rebase to restack branches.
   This rewrites commit history to place commits on top of the new base.
 - `merge`: use git merge to restack branches.
-  This creates merge commits instead of rewriting history,
-  preserving the original commit structure.
+  This creates merge commits with the message
+  "Restack: merge {base-branch} into {branch}"
+  instead of rewriting history, preserving the original commit structure.
 
 **When to use merge-based restacking:**
 

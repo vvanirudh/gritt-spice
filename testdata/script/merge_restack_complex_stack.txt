@@ -66,7 +66,7 @@ stderr 'feat1: branch does not need to be restacked'
 
 # Verify feat1 has merge commit
 git log --oneline --graph feat1
-stdout 'Restack: merge base into feat1'
+stdout 'Restack: merge main into feat1'
 
 # Test 2: Restack entire stack - should handle conflicts at multiple levels
 gs branch checkout feat1
@@ -92,9 +92,9 @@ stderr 'feat3: branch does not need to be restacked'
 # Verify all branches have merge commits
 gs branch checkout feat1
 git log --oneline --graph --all
-stdout 'Restack: merge base into feat1'
-stdout 'Restack: merge base into feat2'
-stdout 'Restack: merge base into feat3'
+stdout 'Restack: merge main into feat1'
+stdout 'Restack: merge feat1 into feat2'
+stdout 'Restack: merge feat2 into feat3'
 
 # Test 3: Stack restack from feat3 (test downstack direction)
 # Make another change on main

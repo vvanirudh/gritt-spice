@@ -110,7 +110,7 @@ func (s *Service) Restack(ctx context.Context, name string) (*RestackResponse, e
 		}
 
 	case RestackMethodMerge:
-		if err := s.restackWithMerge(ctx, name, baseHash, upstream); err != nil {
+		if err := s.restackWithMerge(ctx, name, b.Base, baseHash, upstream); err != nil {
 			return nil, fmt.Errorf("merge: %w", err)
 		}
 
@@ -216,7 +216,7 @@ func (s *Service) CheckRestacked(ctx context.Context, name string) (baseHash git
 
 // restackWithMerge restacks a branch using the merge method.
 // It merges the new base into the branch, creating a merge commit.
-func (s *Service) restackWithMerge(ctx context.Context, name string, baseHash git.Hash, upstream git.Hash) error {
+func (s *Service) restackWithMerge(ctx context.Context, name string, baseName string, baseHash git.Hash, upstream git.Hash) error {
 	// Ensure we're on the branch to restack
 	currentBranch, err := s.wt.CurrentBranch(ctx)
 	if err != nil {
@@ -235,12 +235,12 @@ func (s *Service) restackWithMerge(ctx context.Context, name string, baseHash gi
 	}
 
 	// Merge the base into the current branch
-	// Use a custom merge message as per user requirements
+	// Use a custom merge message with the base branch name
 	if err := s.wt.Merge(ctx, git.MergeRequest{
 		Commit:  baseHash.String(),
 		NoFF:    false, // allow fast-forward if possible
 		Quiet:   true,
-		Message: "Restack: merge base into " + name,
+		Message: "Restack: merge " + baseName + " into " + name,
 	}); err != nil {
 		return err
 	}

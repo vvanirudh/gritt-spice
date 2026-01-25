@@ -28,7 +28,7 @@ stderr 'feat1: restacked on main'
 
 # Verify merge commit was created (not a rebase)
 git log --oneline --graph feat1
-stdout 'Restack: merge base into feat1'
+stdout 'Restack: merge main into feat1'
 
 # Restack feat2
 gs branch checkout feat2
@@ -37,7 +37,7 @@ stderr 'feat2: restacked on feat1'
 
 # Verify merge commits were created
 git log --oneline --graph feat2
-stdout 'Restack: merge base into feat2'
+stdout 'Restack: merge feat1 into feat2'
 
 -- repo/feat1.txt --
 feature 1

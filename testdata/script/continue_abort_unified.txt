@@ -74,7 +74,7 @@ stderr 'feat2: branch does not need to be restacked'
 
 # Verify merge commit was created
 git log --oneline --graph feat2
-stdout 'Restack: merge base into feat2'
+stdout 'Restack: merge main into feat2'
 
 # Test 4: gs abort works with merge
 gs trunk

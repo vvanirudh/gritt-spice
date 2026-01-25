@@ -64,12 +64,12 @@ stderr 'feat3: branch does not need to be restacked'
 # Verify all branches have merge commits
 gs branch checkout feat1
 git log --oneline --graph feat1
-stdout 'Restack: merge base into feat1'
+stdout 'Restack: merge main into feat1'
 
 gs branch checkout feat3
 git log --oneline --graph feat3
-stdout 'Restack: merge base into feat3'
-stdout 'Restack: merge base into feat2'
+stdout 'Restack: merge feat2 into feat3'
+stdout 'Restack: merge feat1 into feat2'
 
 -- repo/init.txt --
 initial

@@ -46,7 +46,7 @@ cmp init.txt $WORK/extra/init.resolved.txt
 
 # Verify merge commit was created
 git log --oneline --graph feature
-stdout 'Restack: merge base into feature'
+stdout 'Restack: merge main into feature'
 
 gs trunk
 cmp init.txt $WORK/extra/init.new.txt
