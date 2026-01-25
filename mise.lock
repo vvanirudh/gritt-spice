@@ -2,6 +2,7 @@
 version = "1.24.0"
 backend = "ubi:miniscruff/changie"
 "platforms.linux-x64-changie" = { checksum = "blake3:8b63ce3ca2871dba4d3a50cea6b4fc8c8aad789a18fdb8c88fc8e6b3b26977cc"}
+"platforms.macos-arm64-changie" = { checksum = "blake3:1c0f9659a327367bcc9a82ca3feeb610feb1378617fe815c780dc7bdb2a847b3"}
 
 [[tools.go]]
 version = "1.25.6"
@@ -19,6 +20,7 @@ backend = "ubi:mvdan/gofumpt"
 version = "2.8.0"
 backend = "aqua:golangci/golangci-lint"
 "platforms.linux-x64" = { checksum = "sha256:7048bc6b25c9515ed092c83f9fa8709ca97937ead52d9ff317a143299ee97a50", url = "https://github.com/golangci/golangci-lint/releases/download/v2.8.0/golangci-lint-2.8.0-linux-amd64.tar.gz"}
+"platforms.macos-arm64" = { checksum = "sha256:6f8979a83117e0607d4b85ff486382ef0404440bbf54f0e6f003ceab6ccf641e", url = "https://github.com/golangci/golangci-lint/releases/download/v2.8.0/golangci-lint-2.8.0-darwin-arm64.tar.gz"}
 
 [[tools.gotestsum]]
 version = "1.13.0"
@@ -33,3 +35,4 @@ backend = "aqua:gotestyourself/gotestsum"
 version = "0.8.0"
 backend = "ubi:abhinav/requiredfield"
 "platforms.linux-x64-requiredfield" = { checksum = "blake3:990a011b39bd70c6cf092e662f78e299b4276c8740016b1dbae93ad647746c52"}
+"platforms.macos-arm64-requiredfield" = { checksum = "blake3:12bcc473cd54cb3d65d272a9066cc7d8f45cfd5ddf6700e71adb1038f7ffcdbd"}

@@ -115,7 +115,13 @@ text "Sibling" with s at F.n
 
 
 **Restacking**
-:   Restacking is the process of rebasing the contents of a branch
-    on top of its base branch, which it may have diverged from.
-    This is done to keep the branch up-to-date with its base branch,
-    and maintain a linear history.
+:   Restacking is the process of integrating changes from a branch's base
+    into the branch when it has diverged from its base.
+    This keeps the branch up-to-date with its base branch.
+
+    By default, restacking uses `git rebase` to rewrite the branch's commits
+    on top of the new base, maintaining a linear history.
+    Alternatively, restacking can be configured to use `git merge`
+    to create merge commits instead of rewriting history.
+    See [spice.restack.method](../cli/config.md#spicerestack.method)
+    for more information.

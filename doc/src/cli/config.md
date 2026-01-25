@@ -281,6 +281,62 @@ whether the branch is in sync with its pushed counterpart.
   show the number of outgoing and incoming commits in the form `⇡1⇣2`,
   where `⇡` indicates outgoing commits and `⇣` indicates incoming commits
 
+### spice.restack.method
+
+<!-- gs:version unreleased -->
+
+Specifies the method to use when restacking branches.
+This affects all restack operations including
+$$gs branch restack$$, $$gs upstack restack$$, $$gs stack restack$$,
+$$gs repo restack$$, and $$gs branch onto$$.
+
+**Accepted values:**
+
+- `rebase` (default): use git rebase to restack branches.
+  This rewrites commit history to place commits on top of the new base.
+- `merge`: use git merge to restack branches.
+  This creates merge commits with the message
+  "Restack: merge {base-branch} into {branch}"
+  instead of rewriting history, preserving the original commit structure.
+
+**When to use merge-based restacking:**
+
+Use `merge` if you:
+
+- Want to preserve the original commit history without rewriting
+- Are working in environments where rewriting history is discouraged
+- Need to maintain exact commit hashes for auditing or compliance
+- Prefer explicit merge commits showing when branches were integrated
+
+Use `rebase` (default) if you:
+
+- Want a linear commit history
+- Follow a workflow that requires clean, rebased branches
+- Are comfortable with rewriting commit history
+
+**Example:**
+
+```bash
+# Configure merge-based restacking globally
+git config --global spice.restack.method merge
+
+# Configure merge-based restacking for current repository only
+git config --local spice.restack.method merge
+
+# Configure rebase-based restacking (default)
+git config spice.restack.method rebase
+```
+
+**Conflict resolution:**
+
+When conflicts occur during merge-based restacking,
+resolve them the same way as with rebase-based restacking:
+
+1. Resolve the conflicts in your editor
+2. Stage the resolved files with `git add`
+3. Run $$gs continue$$ to continue the restack operation
+4. Alternatively, run $$gs abort$$ to abort the operation
+
 ### spice.rebaseContinue.edit
 
 <!-- gs:version v0.10.0 -->
