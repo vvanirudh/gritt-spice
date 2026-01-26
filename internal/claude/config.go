@@ -12,11 +12,19 @@ import (
 )
 
 // Config holds the Claude AI integration configuration.
+// Config holds Claude integration configuration.
+//
+// Configuration merging: When loading from a file, zero values (0, "", nil)
+// are treated as "not set" and default values are preserved. This allows
+// partial configuration files. Limitation: you cannot explicitly set a field
+// to its zero value (e.g., MaxLines=0 is treated as "use default").
 type Config struct {
 	// MaxLines is the maximum number of diff lines to send to Claude.
+	// Default: 4000. Set to 0 in file to keep default (not to disable).
 	MaxLines int `yaml:"maxLines"`
 
 	// IgnorePatterns is a list of glob patterns for files to exclude.
+	// Default includes *.lock, *.sum, vendor/*, etc.
 	IgnorePatterns []string `yaml:"ignorePatterns"`
 
 	// Models configures which Claude model to use for different operations.
