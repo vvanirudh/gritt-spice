@@ -64,6 +64,9 @@ type RefineOption struct {
 }
 
 // Model constants for Claude CLI.
+// Format: claude-{model}-{major}-{minor}-{date}
+// These should be updated when new model versions are released.
+// Users can override these in their config file.
 const (
 	ModelSonnet = "claude-sonnet-4-5-20250929"
 	ModelHaiku  = "claude-haiku-4-5-20251001"
@@ -187,6 +190,24 @@ func LoadConfig(path string) (*Config, error) {
 func (c *Config) Validate() error {
 	if c.MaxLines <= 0 {
 		return errors.New("maxLines must be positive")
+	}
+	if c.Models.Review == "" {
+		return errors.New("models.review must be set")
+	}
+	if c.Models.Summary == "" {
+		return errors.New("models.summary must be set")
+	}
+	if c.Models.Commit == "" {
+		return errors.New("models.commit must be set")
+	}
+	if c.Prompts.Review == "" {
+		return errors.New("prompts.review must be set")
+	}
+	if c.Prompts.Summary == "" {
+		return errors.New("prompts.summary must be set")
+	}
+	if c.Prompts.Commit == "" {
+		return errors.New("prompts.commit must be set")
 	}
 	return nil
 }

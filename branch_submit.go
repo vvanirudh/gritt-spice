@@ -170,7 +170,7 @@ func generatePRSummary(
 	// Get diff between base and branch.
 	diffText, err := repo.DiffText(ctx, base, branch)
 	if err != nil {
-		return "", "", fmt.Errorf("get diff: %w", err)
+		return "", "", fmt.Errorf("get diff %s...%s: %w", base, branch, err)
 	}
 
 	if diffText == "" {
@@ -212,8 +212,9 @@ func generatePRSummary(
 	filteredDiff := claude.ReconstructDiff(filtered)
 	prompt := claude.BuildSummaryPrompt(cfg, branch, base, commitSummary.String(), filteredDiff)
 
-	log.Info("Generating PR summary with Claude...")
+	fmt.Fprint(view, "Generating PR summary with Claude... ")
 	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Summary)
+	fmt.Fprintln(view, "done")
 	if err != nil {
 		return "", "", err
 	}

@@ -24,6 +24,15 @@ var (
 	ErrRateLimited = errors.New("rate limit exceeded")
 )
 
+// Error represents an error from the Claude CLI.
+type Error struct {
+	Message string
+}
+
+func (e *Error) Error() string {
+	return "claude: " + e.Message
+}
+
 // ClientOptions configures the Claude client.
 type ClientOptions struct {
 	// BinaryPath is the path to the claude binary.
@@ -110,9 +119,9 @@ func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string
 			if len(output) > 200 {
 				output = output[:200] + "..."
 			}
-			return "", fmt.Errorf("claude: %s", output)
+			return "", &Error{Message: output}
 		}
-		return "", fmt.Errorf("claude: %w", err)
+		return "", &Error{Message: err.Error()}
 	}
 
 	return parseResponse(stdout.String()), nil
@@ -138,7 +147,7 @@ func checkStderr(stderr string) error {
 		return ErrRateLimited
 
 	case stderr != "":
-		return fmt.Errorf("claude error: %s", strings.TrimSpace(stderr))
+		return &Error{Message: strings.TrimSpace(stderr)}
 	}
 
 	return nil

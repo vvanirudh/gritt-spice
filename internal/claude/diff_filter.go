@@ -199,7 +199,14 @@ func countLines(s string) int {
 
 // ReconstructDiff reconstructs a diff from filtered file sections.
 func ReconstructDiff(files []DiffFile) string {
+	// Pre-allocate capacity to avoid reallocation.
+	totalLen := 0
+	for _, f := range files {
+		totalLen += len(f.Content) + 1
+	}
+
 	var builder strings.Builder
+	builder.Grow(totalLen)
 
 	for i, f := range files {
 		if i > 0 {
