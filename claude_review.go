@@ -143,7 +143,7 @@ func (cmd *claudeReviewCmd) runOverall(
 	prompt := claude.BuildReviewPrompt(cfg, title, filteredDiff)
 
 	fmt.Fprint(view, "Sending to Claude for review... ")
-	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+	response, err := client.SendPromptWithModel(ctx, prompt, cfg.Models.Review)
 	fmt.Fprintln(view, "done")
 	if err != nil {
 		return cmd.handleClaudeError(err)
@@ -187,14 +187,14 @@ func (cmd *claudeReviewCmd) runPerBranch(
 
 	var reviews []string
 	for _, branch := range branches {
-		review, err := cmd.reviewSingleBranch(
+		result, err := cmd.reviewSingleBranch(
 			ctx, log, view, repo, graph, store, client, cfg, branch,
 		)
 		if err != nil {
 			return err
 		}
-		if review != "" {
-			reviews = append(reviews, review)
+		if result.Reviewed {
+			reviews = append(reviews, result.Content)
 		}
 	}
 
@@ -208,9 +208,18 @@ func (cmd *claudeReviewCmd) runPerBranch(
 	return nil
 }
 
-// reviewSingleBranch reviews a single branch and returns the review text.
-// Returns empty string if the branch has no reviewable changes.
-// Returns an error if the branch exceeds the budget.
+// branchReviewResult holds the result of reviewing a single branch.
+type branchReviewResult struct {
+	// Content is the review text formatted for inclusion in stack summary.
+	Content string
+	// Reviewed is true if the branch was actually reviewed.
+	// False if skipped due to no changes.
+	Reviewed bool
+}
+
+// reviewSingleBranch reviews a single branch.
+// Returns Reviewed=false if the branch has no reviewable changes.
+// Returns an error if the branch exceeds the budget or review fails.
 func (cmd *claudeReviewCmd) reviewSingleBranch(
 	ctx context.Context,
 	log *silog.Logger,
@@ -221,11 +230,11 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 	client *claude.Client,
 	cfg *claude.Config,
 	branch string,
-) (string, error) {
+) (branchReviewResult, error) {
 	info, ok := graph.Lookup(branch)
 	if !ok {
 		log.Warn("Branch not found in graph, skipping", "branch", branch)
-		return "", nil
+		return branchReviewResult{Reviewed: false}, nil
 	}
 
 	base := info.Base
@@ -237,28 +246,28 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 
 	diffText, err := repo.DiffText(ctx, base, branch)
 	if err != nil {
-		return "", fmt.Errorf("get diff for branch %s: %w", branch, err)
+		return branchReviewResult{}, fmt.Errorf("get diff for branch %s: %w", branch, err)
 	}
 
 	if diffText == "" {
 		log.Infof("Branch %s has no changes", branch)
-		return "", nil
+		return branchReviewResult{Reviewed: false}, nil
 	}
 
 	files, err := claude.ParseDiff(diffText)
 	if err != nil {
-		return "", fmt.Errorf("parse diff for branch %s: %w", branch, err)
+		return branchReviewResult{}, fmt.Errorf("parse diff for branch %s: %w", branch, err)
 	}
 
 	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
 	if len(filtered) == 0 {
 		log.Infof("Branch %s has no changes after filtering", branch)
-		return "", nil
+		return branchReviewResult{Reviewed: false}, nil
 	}
 
 	budget := claude.CheckBudget(filtered, cfg.MaxLines)
 	if budget.OverBudget {
-		return "", fmt.Errorf(
+		return branchReviewResult{}, fmt.Errorf(
 			"branch %s exceeds budget (%d lines > %d max)",
 			branch, budget.TotalLines, budget.MaxLines,
 		)
@@ -268,10 +277,10 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 	prompt := claude.BuildReviewPrompt(cfg, branch, filteredDiff)
 
 	fmt.Fprint(view, "Reviewing... ")
-	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+	response, err := client.SendPromptWithModel(ctx, prompt, cfg.Models.Review)
 	fmt.Fprintln(view, "done")
 	if err != nil {
-		return "", cmd.handleClaudeError(err)
+		return branchReviewResult{}, cmd.handleClaudeError(err)
 	}
 
 	fmt.Fprintln(view, "")
@@ -279,7 +288,10 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 	fmt.Fprintln(view, "")
 	fmt.Fprintln(view, response)
 
-	return fmt.Sprintf("## Branch: %s\n\n%s", branch, response), nil
+	return branchReviewResult{
+		Content:  fmt.Sprintf("## Branch: %s\n\n%s", branch, response),
+		Reviewed: true,
+	}, nil
 }
 
 // generateStackSummary generates and displays a summary of all branch reviews.
@@ -302,7 +314,7 @@ func (cmd *claudeReviewCmd) generateStackSummary(
 	}
 
 	prompt := claude.BuildStackReviewPrompt(cfg, summary.String())
-	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+	response, err := client.SendPromptWithModel(ctx, prompt, cfg.Models.Review)
 	fmt.Fprintln(view, "done")
 	if err != nil {
 		return cmd.handleClaudeError(err)
@@ -409,7 +421,7 @@ Do not add any new functionality beyond what the review suggests.
 ` + diff
 
 	fmt.Fprint(view, "Applying fixes with Claude... ")
-	response, err := client.RunWithModel(ctx, fixPrompt, cfg.Models.Review)
+	response, err := client.SendPromptWithModel(ctx, fixPrompt, cfg.Models.Review)
 	fmt.Fprintln(view, "done")
 	if err != nil {
 		return cmd.handleClaudeError(err)

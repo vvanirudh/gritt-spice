@@ -67,13 +67,13 @@ func TestNewClient(t *testing.T) {
 	})
 }
 
-func TestClient_Run_notInstalled(t *testing.T) {
+func TestClient_SendPrompt_notInstalled(t *testing.T) {
 	// Test behavior when Claude is not installed.
 	client := NewClient(&ClientOptions{
 		BinaryPath: "/nonexistent/claude",
 	})
 
-	_, err := client.Run(context.Background(), "test prompt")
+	_, err := client.SendPrompt(context.Background(), "test prompt")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrNotInstalled))
 }

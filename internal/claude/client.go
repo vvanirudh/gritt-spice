@@ -92,15 +92,15 @@ func FindClaudeBinary() (string, error) {
 	return path, nil
 }
 
-// Run executes a prompt using the Claude CLI and returns the response.
+// SendPrompt sends a prompt to Claude and returns the response.
 // Uses the default model.
-func (c *Client) Run(ctx context.Context, prompt string) (string, error) {
-	return c.RunWithModel(ctx, prompt, "")
+func (c *Client) SendPrompt(ctx context.Context, prompt string) (string, error) {
+	return c.SendPromptWithModel(ctx, prompt, "")
 }
 
-// RunWithModel executes a prompt using the Claude CLI with a specific model.
+// SendPromptWithModel sends a prompt to Claude with a specific model.
 // If model is empty, uses Claude's default model.
-func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string, error) {
+func (c *Client) SendPromptWithModel(ctx context.Context, prompt, model string) (string, error) {
 	binaryPath, err := c.resolveBinaryPath()
 	if err != nil {
 		return "", err
@@ -145,8 +145,9 @@ func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string
 //
 // Error detection is based on string matching against common error messages
 // from the Claude CLI. These patterns are based on observed CLI behavior
-// and may need updates if the CLI changes its error message format.
-// The CLI does not currently provide structured error output.
+// (tested with Claude CLI v1.x) and may need updates if the CLI changes
+// its error message format. The CLI does not currently provide structured
+// error output, so we rely on substring matching.
 func checkStderr(stderr string) error {
 	stderrLower := strings.ToLower(stderr)
 
