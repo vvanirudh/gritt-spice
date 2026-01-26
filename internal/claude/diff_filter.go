@@ -153,6 +153,13 @@ func FilterDiff(files []DiffFile, ignorePatterns []string) []DiffFile {
 
 // matchesAnyPattern checks if a path matches any of the given glob patterns.
 func matchesAnyPattern(path string, patterns []string) bool {
+	// Sanitize path to prevent traversal attacks.
+	// Clean the path and reject absolute paths or paths with "..".
+	path = filepath.Clean(path)
+	if filepath.IsAbs(path) || strings.HasPrefix(path, "..") {
+		return false // Invalid path, treat as no match
+	}
+
 	for _, pattern := range patterns {
 		// Try matching the full path.
 		matched, err := filepath.Match(pattern, path)

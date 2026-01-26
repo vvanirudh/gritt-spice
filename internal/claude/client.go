@@ -106,6 +106,11 @@ func (c *Client) SendPromptWithModel(ctx context.Context, prompt, model string) 
 		return "", err
 	}
 
+	// Validate model name to prevent injection attacks.
+	if model != "" && !isValidModelName(model) {
+		return "", fmt.Errorf("invalid model name: %q", model)
+	}
+
 	// Apply timeout to prevent indefinite hangs.
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -170,6 +175,24 @@ func checkStderr(stderr string) error {
 	}
 
 	return nil
+}
+
+// isValidModelName checks if a model name contains only safe characters.
+// Model names should be alphanumeric with hyphens, underscores, and dots.
+func isValidModelName(model string) bool {
+	if model == "" {
+		return false
+	}
+	for _, r := range model {
+		isLower := r >= 'a' && r <= 'z'
+		isUpper := r >= 'A' && r <= 'Z'
+		isDigit := r >= '0' && r <= '9'
+		isSpecial := r == '-' || r == '_' || r == '.'
+		if !isLower && !isUpper && !isDigit && !isSpecial {
+			return false
+		}
+	}
+	return true
 }
 
 // IsAvailable checks if the Claude CLI is available.

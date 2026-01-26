@@ -139,6 +139,11 @@ func DefaultConfigPath() string {
 
 // LoadConfig loads configuration from the given path.
 // If the file does not exist, returns the default configuration.
+//
+// Configuration merging: File values override defaults only when non-zero.
+// Zero values (0, "", nil, empty slice) are treated as "not set" and
+// default values are preserved. This allows partial configuration files
+// that only specify the values the user wants to change.
 func LoadConfig(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
@@ -157,6 +162,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Merge file config with defaults.
+	// Non-zero file values override defaults; zero values preserve defaults.
 	if fileCfg.MaxLines != 0 {
 		cfg.MaxLines = fileCfg.MaxLines
 	}
