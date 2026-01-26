@@ -138,12 +138,7 @@ func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string
 		return "", &Error{Message: err.Error()}
 	}
 
-	return parseResponse(stdout.String()), nil
-}
-
-// parseResponse cleans up the raw Claude CLI output.
-func parseResponse(output string) string {
-	return strings.TrimSpace(output)
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 // checkStderr checks for known error patterns in stderr output.

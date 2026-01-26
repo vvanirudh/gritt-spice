@@ -155,19 +155,6 @@ func generatePRSummary(
 	branch string,
 	baseOverride string,
 ) (title, body string, err error) {
-	// Check Claude availability.
-	client := claude.NewClient(nil)
-	if !client.IsAvailable() {
-		return "", "", errors.New("claude CLI not found; please install it")
-	}
-
-	// Load configuration.
-	cfg, err := claude.LoadConfig(claude.DefaultConfigPath())
-	if err != nil {
-		log.Warn("Could not load claude config, using defaults", "error", err)
-		cfg = claude.DefaultConfig()
-	}
-
 	// Determine base branch: use override if provided,
 	// otherwise use tracked state, fallback to trunk.
 	var base string
@@ -193,22 +180,12 @@ func generatePRSummary(
 		return "", "", errors.New("no changes to submit")
 	}
 
-	// Parse and filter the diff.
-	files, err := claude.ParseDiff(diffText)
+	// Prepare diff for Claude.
+	prepared, err := claude.PrepareDiff(diffText, &claude.PrepareDiffOptions{
+		Log: log,
+	})
 	if err != nil {
-		return "", "", fmt.Errorf("parse diff: %w (check for unusual file names or binary files)", err)
-	}
-
-	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
-	if len(filtered) == 0 {
-		return "", "", errors.New("no changes after filtering")
-	}
-
-	// Check budget.
-	budget := claude.CheckBudget(filtered, cfg.MaxLines)
-	if budget.OverBudget {
-		return "", "", fmt.Errorf("diff too large (%d lines, max %d)",
-			budget.TotalLines, budget.MaxLines)
+		return "", "", err
 	}
 
 	// Get commit messages for context.
@@ -225,24 +202,17 @@ func generatePRSummary(
 	}
 
 	// Build prompt and run.
-	filteredDiff := claude.ReconstructDiff(filtered)
-	prompt := claude.BuildSummaryPrompt(cfg, branch, base, commitSummary.String(), filteredDiff)
+	prompt := claude.BuildSummaryPrompt(
+		prepared.Config, branch, base, commitSummary.String(), prepared.FilteredDiff,
+	)
 
 	fmt.Fprint(view, "Generating PR summary with Claude... ")
-	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Summary)
+	response, err := prepared.Client.RunWithModel(
+		ctx, prompt, prepared.Config.Models.Summary,
+	)
 	fmt.Fprintln(view, "done")
 	if err != nil {
-		if errors.Is(err, claude.ErrNotAuthenticated) {
-			return "", "", errors.New(
-				"not authenticated with Claude; run 'claude auth' first",
-			)
-		}
-		if errors.Is(err, claude.ErrRateLimited) {
-			return "", "", errors.New(
-				"claude rate limit exceeded; try again later",
-			)
-		}
-		return "", "", err
+		return "", "", claude.RunClaudeError(err)
 	}
 
 	// Parse the response to extract title and body.

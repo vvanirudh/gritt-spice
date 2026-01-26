@@ -57,10 +57,10 @@ func (cmd *commitCreateCmd) Run(
 	if cmd.ClaudeSummary && message == "" {
 		result, err := cmd.generateCommitMessage(ctx, log, view, wt)
 		if err != nil {
+			if errors.Is(err, errCommitCancelled) {
+				return err
+			}
 			return fmt.Errorf("generate commit message: %w", err)
-		}
-		if result.Cancelled {
-			return errors.New("commit cancelled")
 		}
 		if result.Edit {
 			// Use as template to open editor with pre-filled content.
@@ -104,11 +104,13 @@ func (cmd *commitCreateCmd) Run(
 	})
 }
 
+// errCommitCancelled indicates the user cancelled the commit message generation.
+var errCommitCancelled = errors.New("commit cancelled")
+
 // commitMessageResult holds the result of generating a commit message.
 type commitMessageResult struct {
-	Message   string
-	Edit      bool // If true, open editor with Message as template.
-	Cancelled bool
+	Message string
+	Edit    bool // If true, open editor with Message as template.
 }
 
 func (cmd *commitCreateCmd) generateCommitMessage(
@@ -117,19 +119,6 @@ func (cmd *commitCreateCmd) generateCommitMessage(
 	view ui.View,
 	wt *git.Worktree,
 ) (commitMessageResult, error) {
-	// Check Claude availability.
-	client := claude.NewClient(nil)
-	if !client.IsAvailable() {
-		return commitMessageResult{}, errors.New("claude CLI not found; please install it")
-	}
-
-	// Load configuration.
-	cfg, err := claude.LoadConfig(claude.DefaultConfigPath())
-	if err != nil {
-		log.Warn("Could not load claude config, using defaults", "error", err)
-		cfg = claude.DefaultConfig()
-	}
-
 	// Get staged diff.
 	diffText, err := wt.DiffStaged(ctx)
 	if err != nil {
@@ -140,44 +129,24 @@ func (cmd *commitCreateCmd) generateCommitMessage(
 		return commitMessageResult{}, errors.New("no staged changes")
 	}
 
-	// Parse and filter the diff.
-	files, err := claude.ParseDiff(diffText)
+	// Prepare diff for Claude.
+	prepared, err := claude.PrepareDiff(diffText, &claude.PrepareDiffOptions{
+		Log: log,
+	})
 	if err != nil {
-		return commitMessageResult{},
-			fmt.Errorf("parse diff: %w (check for unusual file names or binary files)", err)
-	}
-
-	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
-	if len(filtered) == 0 {
-		return commitMessageResult{}, errors.New("no changes to commit after filtering")
-	}
-
-	// Check budget.
-	budget := claude.CheckBudget(filtered, cfg.MaxLines)
-	if budget.OverBudget {
-		return commitMessageResult{}, fmt.Errorf("diff too large (%d lines, max %d)",
-			budget.TotalLines, budget.MaxLines)
+		return commitMessageResult{}, err
 	}
 
 	// Build prompt and run.
-	filteredDiff := claude.ReconstructDiff(filtered)
-	prompt := claude.BuildCommitPrompt(cfg, filteredDiff)
+	prompt := claude.BuildCommitPrompt(prepared.Config, prepared.FilteredDiff)
 
 	fmt.Fprint(view, "Generating commit message with Claude... ")
-	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Commit)
+	response, err := prepared.Client.RunWithModel(
+		ctx, prompt, prepared.Config.Models.Commit,
+	)
 	fmt.Fprintln(view, "done")
 	if err != nil {
-		if errors.Is(err, claude.ErrNotAuthenticated) {
-			return commitMessageResult{}, errors.New(
-				"not authenticated with Claude; run 'claude auth' first",
-			)
-		}
-		if errors.Is(err, claude.ErrRateLimited) {
-			return commitMessageResult{}, errors.New(
-				"claude rate limit exceeded; try again later",
-			)
-		}
-		return commitMessageResult{}, err
+		return commitMessageResult{}, claude.RunClaudeError(err)
 	}
 
 	// Parse the response to extract subject and body.
@@ -235,6 +204,6 @@ func showCommitPreview(
 	case choiceEdit:
 		return commitMessageResult{Message: message, Edit: true}, nil
 	default: // choiceCancel
-		return commitMessageResult{Cancelled: true}, nil
+		return commitMessageResult{}, errCommitCancelled
 	}
 }

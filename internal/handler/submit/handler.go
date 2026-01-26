@@ -468,20 +468,21 @@ func (h *Handler) submitBranch(
 	}
 
 	// Determine the upstream base branch.
-	// Use explicit override if provided, otherwise use tracked base.
-	var upstreamBase string
-	if opts.Base != "" {
-		upstreamBase = opts.Base
+	// Priority: explicit override > base's upstream name > tracked base.
+	upstreamBase := opts.Base
+	switch {
+	case opts.Base != "":
 		log.Infof("%v: Using base branch override: %v", branchToSubmit, upstreamBase)
-	} else {
+
+	case branch.Base == h.Store.Trunk():
 		upstreamBase = branch.Base
-		if branch.Base != h.Store.Trunk() {
-			baseBranch, err := svc.LookupBranch(ctx, branch.Base)
-			if err != nil {
-				return status, fmt.Errorf("lookup base branch: %w", err)
-			}
-			upstreamBase = cmp.Or(baseBranch.UpstreamBranch, branch.Base)
+
+	default:
+		baseBranch, err := svc.LookupBranch(ctx, branch.Base)
+		if err != nil {
+			return status, fmt.Errorf("lookup base branch: %w", err)
 		}
+		upstreamBase = cmp.Or(baseBranch.UpstreamBranch, branch.Base)
 	}
 
 	var existingChange *forge.FindChangeItem

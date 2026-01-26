@@ -253,7 +253,26 @@ func wrapParagraph(text string, width int) string {
 
 // FormatCommitMessage formats a commit subject and body into a proper message.
 // The subject is truncated to 72 chars if needed, and the body is wrapped.
+// Returns empty string if both subject and body are empty.
 func FormatCommitMessage(subject, body string) string {
+	subject = strings.TrimSpace(subject)
+	body = strings.TrimSpace(body)
+
+	// Handle empty subject.
+	if subject == "" {
+		if body == "" {
+			return ""
+		}
+		// Use first line of body as subject if subject is empty.
+		lines := strings.SplitN(body, "\n", 2)
+		subject = strings.TrimSpace(lines[0])
+		if len(lines) > 1 {
+			body = strings.TrimSpace(lines[1])
+		} else {
+			body = ""
+		}
+	}
+
 	// Truncate subject if too long.
 	if len(subject) > commitLineWidth {
 		// Find last space before limit to avoid cutting words.
@@ -274,7 +293,7 @@ func FormatCommitMessage(subject, body string) string {
 	}
 
 	// Wrap the body text.
-	wrappedBody := WrapText(strings.TrimSpace(body), commitLineWidth)
+	wrappedBody := WrapText(body, commitLineWidth)
 
 	return subject + "\n\n" + wrappedBody
 }

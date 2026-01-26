@@ -20,20 +20,6 @@ func TestFindClaudeBinary(t *testing.T) {
 	})
 }
 
-func TestClient_parseResponse(t *testing.T) {
-	t.Run("SimpleText", func(t *testing.T) {
-		output := "This is a simple response from Claude."
-		result := parseResponse(output)
-		assert.Equal(t, "This is a simple response from Claude.", result)
-	})
-
-	t.Run("WithLeadingWhitespace", func(t *testing.T) {
-		output := "\n\n  Response with whitespace  \n\n"
-		result := parseResponse(output)
-		assert.Equal(t, "Response with whitespace", result)
-	})
-}
-
 func TestClient_checkStderr(t *testing.T) {
 	t.Run("AuthError", func(t *testing.T) {
 		stderr := "Error: Not authenticated. Please run 'claude auth' first."
