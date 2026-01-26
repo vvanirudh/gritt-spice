@@ -2,18 +2,25 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"go.abhg.dev/gs/internal/claude"
 	"go.abhg.dev/gs/internal/git"
 	"go.abhg.dev/gs/internal/handler/submit"
+	"go.abhg.dev/gs/internal/silog"
+	"go.abhg.dev/gs/internal/spice/state"
 	"go.abhg.dev/gs/internal/text"
+	"go.abhg.dev/gs/internal/ui"
 )
 
 // submitOptions defines options that are common to all submit commands.
 type submitOptions struct {
 	submit.Options
 
-	NoWeb bool `help:"Alias for --web=false."`
+	NoWeb         bool `help:"Alias for --web=false."`
+	ClaudeSummary bool `help:"Generate PR title and body using Claude AI."`
 
 	// TODO: Other creation options e.g.:
 	// - milestone
@@ -90,7 +97,11 @@ type SubmitHandler interface {
 
 func (cmd *branchSubmitCmd) Run(
 	ctx context.Context,
+	log *silog.Logger,
+	view ui.View,
+	repo *git.Repository,
 	wt *git.Worktree,
+	store *state.Store,
 	submitHandler SubmitHandler,
 ) error {
 	if cmd.NoWeb {
@@ -105,10 +116,196 @@ func (cmd *branchSubmitCmd) Run(
 		cmd.Branch = currentBranch
 	}
 
+	title := cmd.Title
+	body := cmd.Body
+
+	// Generate PR summary with Claude if requested.
+	if cmd.ClaudeSummary && title == "" {
+		var err error
+		title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch)
+		if err != nil {
+			return fmt.Errorf("generate PR summary: %w", err)
+		}
+		if title == "" {
+			return errors.New("submit cancelled")
+		}
+	}
+
 	return submitHandler.Submit(ctx, &submit.Request{
 		Branch:  cmd.Branch,
-		Title:   cmd.Title,
-		Body:    cmd.Body,
+		Title:   title,
+		Body:    body,
 		Options: &cmd.Options,
 	})
+}
+
+// generatePRSummary generates a PR title and body using Claude.
+func generatePRSummary(
+	ctx context.Context,
+	log *silog.Logger,
+	view ui.View,
+	repo *git.Repository,
+	store *state.Store,
+	branch string,
+) (title, body string, err error) {
+	// Check Claude availability.
+	client := claude.NewClient(nil)
+	if !client.IsAvailable() {
+		return "", "", errors.New("claude CLI not found; please install it")
+	}
+
+	// Load configuration.
+	cfg, err := claude.LoadConfig(claude.DefaultConfigPath())
+	if err != nil {
+		log.Warn("Could not load claude config, using defaults", "error", err)
+		cfg = claude.DefaultConfig()
+	}
+
+	// Determine base branch.
+	base := store.Trunk()
+
+	// Get diff between base and branch.
+	diffText, err := repo.DiffText(ctx, base, branch)
+	if err != nil {
+		return "", "", fmt.Errorf("get diff: %w", err)
+	}
+
+	if diffText == "" {
+		return "", "", errors.New("no changes to submit")
+	}
+
+	// Parse and filter the diff.
+	files, err := claude.ParseDiff(diffText)
+	if err != nil {
+		return "", "", fmt.Errorf("parse diff: %w", err)
+	}
+
+	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
+	if len(filtered) == 0 {
+		return "", "", errors.New("no changes after filtering")
+	}
+
+	// Check budget.
+	budget := claude.CheckBudget(filtered, cfg.MaxLines)
+	if budget.OverBudget {
+		return "", "", fmt.Errorf("diff too large (%d lines, max %d)",
+			budget.TotalLines, budget.MaxLines)
+	}
+
+	// Get commit messages for context.
+	commits, err := repo.CommitMessageRange(ctx, branch, base)
+	if err != nil {
+		log.Warn("Could not get commit messages", "error", err)
+	}
+
+	var commitSummary strings.Builder
+	for _, c := range commits {
+		commitSummary.WriteString("- ")
+		commitSummary.WriteString(c.Subject)
+		commitSummary.WriteString("\n")
+	}
+
+	// Build prompt and run.
+	filteredDiff := claude.ReconstructDiff(filtered)
+	prompt := claude.BuildSummaryPrompt(cfg, branch, base, commitSummary.String(), filteredDiff)
+
+	log.Info("Generating PR summary with Claude...")
+	response, err := client.Run(ctx, prompt)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Parse the response to extract title and body.
+	title, body = parseSummaryResponse(response)
+
+	// Show preview and get user choice.
+	return showSummaryPreview(view, title, body)
+}
+
+// parseSummaryResponse extracts title and body from Claude's response.
+func parseSummaryResponse(response string) (title, body string) {
+	lines := strings.Split(strings.TrimSpace(response), "\n")
+	if len(lines) == 0 {
+		return response, ""
+	}
+
+	// Look for TITLE: prefix.
+	for i, line := range lines {
+		lineLower := strings.ToLower(line)
+		if strings.HasPrefix(lineLower, "title:") {
+			title = strings.TrimSpace(line[6:])
+			if i+1 < len(lines) {
+				// Skip empty lines and BODY: prefix.
+				remaining := lines[i+1:]
+				for j, l := range remaining {
+					lLower := strings.ToLower(l)
+					if strings.HasPrefix(lLower, "body:") {
+						remaining = remaining[j+1:]
+						break
+					}
+					if strings.TrimSpace(l) != "" {
+						remaining = remaining[j:]
+						break
+					}
+				}
+				body = strings.TrimSpace(strings.Join(remaining, "\n"))
+			}
+			return title, body
+		}
+	}
+
+	// Fallback: first line is title, rest is body.
+	title = lines[0]
+	if len(lines) > 1 {
+		body = strings.TrimSpace(strings.Join(lines[1:], "\n"))
+	}
+	return title, body
+}
+
+// showSummaryPreview shows the generated PR summary and lets user accept/edit.
+func showSummaryPreview(view ui.View, title, body string) (string, string, error) {
+	// For non-interactive mode, just return.
+	if !ui.Interactive(view) {
+		return title, body, nil
+	}
+
+	// Show preview.
+	fmt.Fprintln(view, "")
+	fmt.Fprintln(view, "=== Claude suggests ===")
+	fmt.Fprintln(view, "Title:", title)
+	if body != "" {
+		fmt.Fprintln(view, "")
+		fmt.Fprintln(view, body)
+	}
+	fmt.Fprintln(view, "=======================")
+	fmt.Fprintln(view, "")
+
+	// Ask for confirmation.
+	type choice int
+	const (
+		choiceAccept choice = iota
+		choiceCancel
+	)
+
+	var selected choice
+	field := ui.NewSelect[choice]().
+		WithTitle("Action").
+		WithValue(&selected).
+		WithOptions(
+			ui.SelectOption[choice]{Label: "Accept", Value: choiceAccept},
+			ui.SelectOption[choice]{Label: "Cancel", Value: choiceCancel},
+		)
+
+	if err := ui.Run(view, field); err != nil {
+		return "", "", err
+	}
+
+	switch selected {
+	case choiceAccept:
+		return title, body, nil
+	case choiceCancel:
+		return "", "", nil
+	}
+
+	return title, body, nil
 }
