@@ -182,24 +182,18 @@ func showCommitPreview(
 	view ui.View,
 	subject, body string,
 ) (commitMessageResult, error) {
-	message := subject
-	if body != "" {
-		message = subject + "\n\n" + body
-	}
+	// Format the commit message with proper line wrapping.
+	message := claude.FormatCommitMessage(subject, body)
 
 	// For non-interactive mode, just return the message.
 	if !ui.Interactive(view) {
 		return commitMessageResult{Message: message}, nil
 	}
 
-	// Show preview.
+	// Show preview of the actual formatted message.
 	fmt.Fprintln(view, "")
 	fmt.Fprintln(view, "=== Claude suggests ===")
-	fmt.Fprintln(view, "Subject:", subject)
-	if body != "" {
-		fmt.Fprintln(view, "")
-		fmt.Fprintln(view, body)
-	}
+	fmt.Fprintln(view, message)
 	fmt.Fprintln(view, "=======================")
 	fmt.Fprintln(view, "")
 
