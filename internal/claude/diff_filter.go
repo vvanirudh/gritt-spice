@@ -240,3 +240,32 @@ func ReconstructDiff(files []DiffFile) string {
 
 	return builder.String()
 }
+
+// FilteredDiffResult holds the result of parsing and filtering a diff.
+type FilteredDiffResult struct {
+	// Files is the list of filtered diff files.
+	Files []DiffFile
+	// Budget is the budget check result.
+	Budget BudgetResult
+	// FilteredDiff is the reconstructed diff text.
+	FilteredDiff string
+}
+
+// ParseAndFilterDiff parses a diff, filters it, and checks the budget.
+// Returns the filtered files, budget info, and reconstructed diff.
+// Does not return an error for over-budget - callers should check Budget.OverBudget.
+func ParseAndFilterDiff(diffText string, cfg *Config) (*FilteredDiffResult, error) {
+	files, err := ParseDiff(diffText)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := FilterDiff(files, cfg.IgnorePatterns)
+	budget := CheckBudget(filtered, cfg.MaxLines)
+
+	return &FilteredDiffResult{
+		Files:        filtered,
+		Budget:       budget,
+		FilteredDiff: ReconstructDiff(filtered),
+	}, nil
+}
