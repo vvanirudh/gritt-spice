@@ -65,7 +65,14 @@ func FindClaudeBinary() (string, error) {
 }
 
 // Run executes a prompt using the Claude CLI and returns the response.
+// Uses the default model.
 func (c *Client) Run(ctx context.Context, prompt string) (string, error) {
+	return c.RunWithModel(ctx, prompt, "")
+}
+
+// RunWithModel executes a prompt using the Claude CLI with a specific model.
+// If model is empty, uses Claude's default model.
+func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string, error) {
 	binaryPath := c.binaryPath
 	if binaryPath == "" {
 		var err error
@@ -81,13 +88,20 @@ func (c *Client) Run(ctx context.Context, prompt string) (string, error) {
 	}
 
 	// Prepare command with -p flag for prompt.
-	cmd := xec.Command(ctx, c.log, binaryPath, "-p", prompt)
+	args := []string{"-p", prompt}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	cmd := xec.Command(ctx, c.log, binaryPath, args...)
 
-	var stdout bytes.Buffer
-	cmd = cmd.WithStdout(&stdout)
+	var stdout, stderr bytes.Buffer
+	cmd = cmd.WithStdout(&stdout).WithStderr(&stderr)
 
 	err := cmd.Run()
 	if err != nil {
+		if stderrErr := checkStderr(stderr.String()); stderrErr != nil {
+			return "", stderrErr
+		}
 		return "", fmt.Errorf("run claude: %w", err)
 	}
 
