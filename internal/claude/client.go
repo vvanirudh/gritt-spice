@@ -16,6 +16,12 @@ import (
 
 // maxOutputSize is the maximum size of stdout/stderr buffers (10 MB).
 // This prevents memory exhaustion from malicious or runaway CLI output.
+//
+// If Claude's response exceeds this limit, an error is returned.
+// This is rare since Claude responses are typically much smaller,
+// but could occur with very large code reviews or summaries.
+// Users hitting this limit should reduce their diff size using
+// --from/--to flags or by configuring ignorePatterns in claude.yaml.
 const maxOutputSize = 10 * 1024 * 1024
 
 // Sentinel errors for Claude client operations.
@@ -150,6 +156,16 @@ func (c *Client) SendPromptWithModel(ctx context.Context, prompt, model string) 
 		return "", &Error{Message: err.Error()}
 	}
 
+	// Check for truncation - response was too large.
+	if stdout.Truncated() {
+		return "", &Error{
+			Message: fmt.Sprintf(
+				"response truncated (exceeded %d MB limit); try a smaller diff",
+				maxOutputSize/(1024*1024),
+			),
+		}
+	}
+
 	return strings.TrimSpace(stdout.String()), nil
 }
 
@@ -236,33 +252,31 @@ func (c *Client) resolveBinaryPath() (string, error) {
 }
 
 // limitedBuffer is a buffer that stops accepting writes after reaching a limit.
-// It silently discards data beyond the limit to prevent memory exhaustion.
+// Data beyond the limit is discarded, but truncation is tracked via Truncated().
 //
-// IMPORTANT: This type intentionally violates the io.Writer contract by returning
-// len(p), nil even when data is discarded. This is by design to prevent callers
-// (like exec.Cmd) from treating truncation as an error. Use only for scenarios
-// where silent truncation is acceptable, such as capturing CLI output.
+// This type returns len(p), nil even when data is discarded to prevent callers
+// (like exec.Cmd) from treating truncation as an error. Callers should check
+// Truncated() after writing to detect if data was lost.
 type limitedBuffer struct {
-	buf   bytes.Buffer
-	limit int
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
 }
 
 // Write implements io.Writer with a size limit.
-// Returns len(p), nil always to indicate success, even when data is discarded.
-// This intentionally violates the io.Writer contract to prevent callers from
-// treating truncation as an error.
+// Returns len(p), nil always. Check Truncated() to detect data loss.
 func (b *limitedBuffer) Write(p []byte) (n int, err error) {
 	remaining := b.limit - b.buf.Len()
 	if remaining <= 0 {
-		// At limit: silently discard all data.
+		b.truncated = true
 		return len(p), nil
 	}
 	if len(p) <= remaining {
-		// Fits entirely: write all.
 		_, err = b.buf.Write(p)
 		return len(p), err
 	}
-	// Partial fit: write what we can, report full success.
+	// Partial fit: write what we can, mark as truncated.
+	b.truncated = true
 	_, err = b.buf.Write(p[:remaining])
 	return len(p), err
 }
@@ -270,6 +284,11 @@ func (b *limitedBuffer) Write(p []byte) (n int, err error) {
 // String returns the buffered content.
 func (b *limitedBuffer) String() string {
 	return b.buf.String()
+}
+
+// Truncated returns true if data was discarded due to the size limit.
+func (b *limitedBuffer) Truncated() bool {
+	return b.truncated
 }
 
 // Len returns the current buffer length.

@@ -127,23 +127,25 @@ func (cmd *branchSubmitCmd) Run(
 	body := cmd.Body
 
 	// Generate PR summary with Claude if requested.
-	if cmd.ClaudeSummary && title != "" {
-		log.Warn("--claude-summary ignored because --title was provided")
-	}
-	if cmd.ClaudeSummary && title == "" && body != "" {
-		log.Warn("--body will be overwritten by --claude-summary")
-	}
-	if cmd.ClaudeSummary && title == "" {
-		var err error
-		title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch, cmd.Base)
-		if err != nil {
-			if errors.Is(err, errSummaryCancelled) {
-				return err
+	if cmd.ClaudeSummary {
+		switch {
+		case title != "":
+			log.Warn("--claude-summary ignored because --title was provided")
+		default:
+			if body != "" {
+				log.Warn("--body will be overwritten by --claude-summary")
 			}
-			return fmt.Errorf("generate PR summary: %w", err)
+			var err error
+			title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch, cmd.Base)
+			if err != nil {
+				if errors.Is(err, errSummaryCancelled) {
+					return err
+				}
+				return fmt.Errorf("generate PR summary: %w", err)
+			}
+			// Empty title with no error means no diff available;
+			// continue with submit (will prompt for metadata).
 		}
-		// Empty title with no error means no diff available;
-		// continue with submit (will prompt for metadata).
 	}
 
 	return submitHandler.Submit(ctx, &submit.Request{
@@ -167,7 +169,7 @@ func generatePRSummary(
 	baseOverride string,
 ) (title, body string, err error) {
 	// Determine base branch: use override if provided,
-	// otherwise use tracked state, fallback to trunk.
+	// otherwise use tracked state, fallback to trunk for untracked branches.
 	var base string
 	if baseOverride != "" {
 		base = baseOverride
@@ -178,8 +180,12 @@ func generatePRSummary(
 		}
 		branchInfo, err := store.LookupBranch(ctx, branch)
 		if err != nil {
-			log.Warn("Could not look up branch, using trunk as base",
-				"branch", branch, "error", err)
+			// Only fall back to trunk if branch is not tracked.
+			// Other errors (storage issues) should be reported.
+			if !errors.Is(err, state.ErrNotExist) {
+				return "", "", fmt.Errorf("look up branch %s: %w", branch, err)
+			}
+			log.Info("Branch not tracked, using trunk as base", "branch", branch)
 		} else if branchInfo.Base != "" {
 			base = branchInfo.Base
 		}
