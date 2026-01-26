@@ -215,7 +215,7 @@ func generatePRSummary(
 	log.Info("Generating PR summary with Claude...")
 	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Summary)
 	if err != nil {
-		return "", "", fmt.Errorf("run claude: %w", err)
+		return "", "", err
 	}
 
 	// Parse the response to extract title and body.
