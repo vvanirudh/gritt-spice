@@ -13,12 +13,35 @@ const commitLineWidth = 72
 // Placeholders are in the format {key}.
 // Missing keys are left as-is.
 func BuildPrompt(template string, vars map[string]string) string {
-	result := template
-	for key, value := range vars {
-		placeholder := "{" + key + "}"
-		result = strings.ReplaceAll(result, placeholder, value)
+	// Estimate output size for pre-allocation.
+	estimatedSize := len(template)
+	for _, value := range vars {
+		estimatedSize += len(value)
 	}
-	return result
+
+	var result strings.Builder
+	result.Grow(estimatedSize)
+
+	// Process template character by character, looking for placeholders.
+	i := 0
+	for i < len(template) {
+		if template[i] == '{' {
+			// Look for closing brace.
+			end := strings.IndexByte(template[i+1:], '}')
+			if end != -1 {
+				key := template[i+1 : i+1+end]
+				if value, ok := vars[key]; ok {
+					result.WriteString(value)
+					i += end + 2 // Skip past {key}
+					continue
+				}
+			}
+		}
+		result.WriteByte(template[i])
+		i++
+	}
+
+	return result.String()
 }
 
 // BuildReviewPrompt builds a code review prompt.
