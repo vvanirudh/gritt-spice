@@ -54,6 +54,9 @@ func (cmd *commitCreateCmd) Run(
 	// Generate commit message with Claude if requested.
 	message := cmd.Message
 	template := ""
+	if cmd.ClaudeSummary && message != "" {
+		log.Warn("--claude-summary ignored because -m/--message was provided")
+	}
 	if cmd.ClaudeSummary && message == "" {
 		result, err := cmd.generateCommitMessage(ctx, log, view, wt)
 		if err != nil {
