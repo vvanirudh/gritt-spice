@@ -339,6 +339,10 @@ type Request struct {
 	// Title and Body are the title and body of the change request.
 	Title, Body string // optional
 
+	// Base is an optional base branch override.
+	// If set, this base branch is used instead of the tracked base.
+	Base string // optional
+
 	// Options are the options for the submit operation.
 	Options *Options // optional
 }
@@ -355,6 +359,7 @@ func (h *Handler) Submit(ctx context.Context, req *Request) error {
 			Options: opts,
 			Title:   req.Title,
 			Body:    req.Body,
+			Base:    req.Base,
 		},
 	)
 	if err != nil {
@@ -391,6 +396,7 @@ type submitOptions struct {
 	*Options
 
 	Title, Body string
+	Base        string // optional override for base branch
 }
 
 func (h *Handler) submitBranch(
@@ -461,15 +467,21 @@ func (h *Handler) submitBranch(
 		}
 	}
 
-	// Similarly, if the branch's base has a different name upstream,
-	// use that name instead.
-	upstreamBase := branch.Base
-	if branch.Base != h.Store.Trunk() {
-		baseBranch, err := svc.LookupBranch(ctx, branch.Base)
-		if err != nil {
-			return status, fmt.Errorf("lookup base branch: %w", err)
+	// Determine the upstream base branch.
+	// Use explicit override if provided, otherwise use tracked base.
+	var upstreamBase string
+	if opts.Base != "" {
+		upstreamBase = opts.Base
+		log.Infof("%v: Using base branch override: %v", branchToSubmit, upstreamBase)
+	} else {
+		upstreamBase = branch.Base
+		if branch.Base != h.Store.Trunk() {
+			baseBranch, err := svc.LookupBranch(ctx, branch.Base)
+			if err != nil {
+				return status, fmt.Errorf("lookup base branch: %w", err)
+			}
+			upstreamBase = cmp.Or(baseBranch.UpstreamBranch, branch.Base)
 		}
-		upstreamBase = cmp.Or(baseBranch.UpstreamBranch, branch.Base)
 	}
 
 	var existingChange *forge.FindChangeItem

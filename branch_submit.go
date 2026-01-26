@@ -57,6 +57,7 @@ type branchSubmitCmd struct {
 	Title  string `help:"Title of the change request" placeholder:"TITLE"`
 	Body   string `help:"Body of the change request" placeholder:"BODY"`
 	Branch string `placeholder:"NAME" help:"Branch to submit" predictor:"trackedBranches"`
+	Base   string `short:"b" placeholder:"BRANCH" help:"Base branch for the PR (overrides tracked base)"`
 }
 
 func (*branchSubmitCmd) Help() string {
@@ -64,6 +65,9 @@ func (*branchSubmitCmd) Help() string {
 		A Change Request is created for the current branch,
 		or updated if it already exists.
 		Use the --branch flag to target a different branch.
+
+		Use --base to specify a different base branch for the PR.
+		This overrides the tracked base branch.
 
 		For new Change Requests, a prompt will allow filling metadata.
 		Use the --title and --body flags to skip the prompt,
@@ -122,7 +126,7 @@ func (cmd *branchSubmitCmd) Run(
 	// Generate PR summary with Claude if requested.
 	if cmd.ClaudeSummary && title == "" {
 		var err error
-		title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch)
+		title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch, cmd.Base)
 		if err != nil {
 			return fmt.Errorf("generate PR summary: %w", err)
 		}
@@ -135,11 +139,13 @@ func (cmd *branchSubmitCmd) Run(
 		Branch:  cmd.Branch,
 		Title:   title,
 		Body:    body,
+		Base:    cmd.Base,
 		Options: &cmd.Options,
 	})
 }
 
 // generatePRSummary generates a PR title and body using Claude.
+// If baseOverride is non-empty, it is used instead of the tracked base.
 func generatePRSummary(
 	ctx context.Context,
 	log *silog.Logger,
@@ -147,6 +153,7 @@ func generatePRSummary(
 	repo *git.Repository,
 	store *state.Store,
 	branch string,
+	baseOverride string,
 ) (title, body string, err error) {
 	// Check Claude availability.
 	client := claude.NewClient(nil)
@@ -161,10 +168,16 @@ func generatePRSummary(
 		cfg = claude.DefaultConfig()
 	}
 
-	// Determine base branch from tracked state, fallback to trunk.
-	base := store.Trunk()
-	if branchInfo, err := store.LookupBranch(ctx, branch); err == nil && branchInfo.Base != "" {
-		base = branchInfo.Base
+	// Determine base branch: use override if provided,
+	// otherwise use tracked state, fallback to trunk.
+	var base string
+	if baseOverride != "" {
+		base = baseOverride
+	} else {
+		base = store.Trunk()
+		if branchInfo, err := store.LookupBranch(ctx, branch); err == nil && branchInfo.Base != "" {
+			base = branchInfo.Base
+		}
 	}
 
 	// Get diff between base and branch.
@@ -180,7 +193,7 @@ func generatePRSummary(
 	// Parse and filter the diff.
 	files, err := claude.ParseDiff(diffText)
 	if err != nil {
-		return "", "", fmt.Errorf("parse diff: %w", err)
+		return "", "", fmt.Errorf("parse diff: %w (check for unusual file names or binary files)", err)
 	}
 
 	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)

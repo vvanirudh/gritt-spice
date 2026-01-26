@@ -173,101 +173,143 @@ func (cmd *claudeReviewCmd) runPerBranch(
 	cfg *claude.Config,
 	fromRef, toRef, title string,
 ) error {
-	// Get the branch graph to find all branches in the stack.
 	graph, err := svc.BranchGraph(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("load branch graph: %w", err)
 	}
 
-	// Find the path from fromRef to toRef.
 	branches := collectBranchPath(graph, store.Trunk(), toRef)
-
 	if len(branches) == 0 {
 		log.Info("No tracked branches found in range")
 		return cmd.runOverall(ctx, log, view, repo, client, cfg, fromRef, toRef, title)
 	}
 
 	var reviews []string
-
-	// Review each branch.
 	for _, branch := range branches {
-		info, ok := graph.Lookup(branch)
-		if !ok {
-			continue
-		}
-
-		base := info.Base
-		if base == "" {
-			base = store.Trunk()
-		}
-
-		log.Infof("Reviewing branch: %s (base: %s)", branch, base)
-
-		diffText, err := repo.DiffText(ctx, base, branch)
+		review, err := cmd.reviewSingleBranch(
+			ctx, log, view, repo, graph, store, client, cfg, branch,
+		)
 		if err != nil {
-			log.Warn("Could not get diff for branch", "branch", branch, "error", err)
-			continue
+			return err
 		}
-
-		if diffText == "" {
-			log.Infof("Branch %s has no changes", branch)
-			continue
+		if review != "" {
+			reviews = append(reviews, review)
 		}
-
-		files, err := claude.ParseDiff(diffText)
-		if err != nil {
-			log.Warn("Could not parse diff for branch", "branch", branch, "error", err)
-			continue
-		}
-
-		filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
-		if len(filtered) == 0 {
-			log.Infof("Branch %s has no changes after filtering", branch)
-			continue
-		}
-
-		budget := claude.CheckBudget(filtered, cfg.MaxLines)
-		if budget.OverBudget {
-			log.Warnf("Branch %s exceeds budget (%d lines > %d max)",
-				branch, budget.TotalLines, budget.MaxLines)
-			continue
-		}
-
-		filteredDiff := claude.ReconstructDiff(filtered)
-		prompt := claude.BuildReviewPrompt(cfg, branch, filteredDiff)
-
-		fmt.Fprint(view, "Reviewing... ")
-		response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
-		fmt.Fprintln(view, "done")
-		if err != nil {
-			return cmd.handleClaudeError(err)
-		}
-
-		reviews = append(reviews, fmt.Sprintf("## Branch: %s\n\n%s", branch, response))
-
-		fmt.Fprintln(view, "")
-		fmt.Fprintf(view, "=== Review: %s ===\n", branch)
-		fmt.Fprintln(view, "")
-		fmt.Fprintln(view, response)
 	}
 
-	// Overall summary.
+	// Generate stack summary if multiple branches were reviewed.
 	if len(reviews) > 1 {
-		fmt.Fprint(view, "Generating stack summary... ")
-		stackSummary := strings.Join(reviews, "\n\n---\n\n")
-		prompt := claude.BuildStackReviewPrompt(cfg, stackSummary)
-
-		response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
-		fmt.Fprintln(view, "done")
-		if err != nil {
-			return cmd.handleClaudeError(err)
+		if err := cmd.generateStackSummary(ctx, view, client, cfg, reviews); err != nil {
+			return err
 		}
-
-		fmt.Fprintln(view, "")
-		fmt.Fprintln(view, "=== Stack Summary ===")
-		fmt.Fprintln(view, "")
-		fmt.Fprintln(view, response)
 	}
+
+	return nil
+}
+
+// reviewSingleBranch reviews a single branch and returns the review text.
+// Returns empty string if the branch should be skipped.
+func (cmd *claudeReviewCmd) reviewSingleBranch(
+	ctx context.Context,
+	log *silog.Logger,
+	view ui.View,
+	repo *git.Repository,
+	graph *spice.BranchGraph,
+	store *state.Store,
+	client *claude.Client,
+	cfg *claude.Config,
+	branch string,
+) (string, error) {
+	info, ok := graph.Lookup(branch)
+	if !ok {
+		return "", nil
+	}
+
+	base := info.Base
+	if base == "" {
+		base = store.Trunk()
+	}
+
+	log.Infof("Reviewing branch: %s (base: %s)", branch, base)
+
+	diffText, err := repo.DiffText(ctx, base, branch)
+	if err != nil {
+		log.Warn("Could not get diff for branch", "branch", branch, "error", err)
+		return "", nil
+	}
+
+	if diffText == "" {
+		log.Infof("Branch %s has no changes", branch)
+		return "", nil
+	}
+
+	files, err := claude.ParseDiff(diffText)
+	if err != nil {
+		log.Warn("Could not parse diff for branch", "branch", branch, "error", err)
+		return "", nil
+	}
+
+	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
+	if len(filtered) == 0 {
+		log.Infof("Branch %s has no changes after filtering", branch)
+		return "", nil
+	}
+
+	budget := claude.CheckBudget(filtered, cfg.MaxLines)
+	if budget.OverBudget {
+		log.Warnf("Branch %s exceeds budget (%d lines > %d max)",
+			branch, budget.TotalLines, budget.MaxLines)
+		return "", nil
+	}
+
+	filteredDiff := claude.ReconstructDiff(filtered)
+	prompt := claude.BuildReviewPrompt(cfg, branch, filteredDiff)
+
+	fmt.Fprint(view, "Reviewing... ")
+	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+	fmt.Fprintln(view, "done")
+	if err != nil {
+		return "", cmd.handleClaudeError(err)
+	}
+
+	fmt.Fprintln(view, "")
+	fmt.Fprintf(view, "=== Review: %s ===\n", branch)
+	fmt.Fprintln(view, "")
+	fmt.Fprintln(view, response)
+
+	return fmt.Sprintf("## Branch: %s\n\n%s", branch, response), nil
+}
+
+// generateStackSummary generates and displays a summary of all branch reviews.
+func (cmd *claudeReviewCmd) generateStackSummary(
+	ctx context.Context,
+	view ui.View,
+	client *claude.Client,
+	cfg *claude.Config,
+	reviews []string,
+) error {
+	fmt.Fprint(view, "Generating stack summary... ")
+
+	// Build stack summary with separator.
+	var summary strings.Builder
+	for i, review := range reviews {
+		if i > 0 {
+			summary.WriteString("\n\n---\n\n")
+		}
+		summary.WriteString(review)
+	}
+
+	prompt := claude.BuildStackReviewPrompt(cfg, summary.String())
+	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+	fmt.Fprintln(view, "done")
+	if err != nil {
+		return cmd.handleClaudeError(err)
+	}
+
+	fmt.Fprintln(view, "")
+	fmt.Fprintln(view, "=== Stack Summary ===")
+	fmt.Fprintln(view, "")
+	fmt.Fprintln(view, response)
 
 	return nil
 }
@@ -374,6 +416,7 @@ Do not add any new functionality beyond what the review suggests.
 }
 
 // collectBranchPath collects branches from trunk to target in the branch graph.
+// Returns branches in bottom-up order (closest to trunk first, target last).
 func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string {
 	var branches []string
 

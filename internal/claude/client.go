@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"go.abhg.dev/gs/internal/silog"
 	"go.abhg.dev/gs/internal/xec"
@@ -33,11 +34,18 @@ func (e *Error) Error() string {
 	return "claude: " + e.Message
 }
 
+// DefaultTimeout is the default timeout for Claude API calls.
+const DefaultTimeout = 5 * time.Minute
+
 // ClientOptions configures the Claude client.
 type ClientOptions struct {
 	// BinaryPath is the path to the claude binary.
 	// If empty, the client will search for it in PATH.
 	BinaryPath string
+
+	// Timeout is the maximum duration for Claude API calls.
+	// If zero, DefaultTimeout is used.
+	Timeout time.Duration
 
 	// Log is the logger to use. Optional.
 	Log *silog.Logger
@@ -46,6 +54,7 @@ type ClientOptions struct {
 // Client wraps the Claude CLI for AI operations.
 type Client struct {
 	binaryPath string
+	timeout    time.Duration
 	log        *silog.Logger
 }
 
@@ -58,8 +67,13 @@ func NewClient(opts *ClientOptions) *Client {
 	if log == nil {
 		log = silog.Nop()
 	}
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
 	return &Client{
 		binaryPath: opts.BinaryPath,
+		timeout:    timeout,
 		log:        log,
 	}
 }
@@ -95,6 +109,10 @@ func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string
 	if _, err := os.Stat(binaryPath); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrNotInstalled, err)
 	}
+
+	// Apply timeout to prevent indefinite hangs.
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
 
 	// Prepare command with -p flag for prompt.
 	args := []string{"-p", prompt}
@@ -133,20 +151,29 @@ func parseResponse(output string) string {
 }
 
 // checkStderr checks for known error patterns in stderr output.
+//
+// Error detection is based on string matching against common error messages
+// from the Claude CLI. These patterns are based on observed CLI behavior
+// and may need updates if the CLI changes its error message format.
+// The CLI does not currently provide structured error output.
 func checkStderr(stderr string) error {
 	stderrLower := strings.ToLower(stderr)
 
-	switch {
-	case strings.Contains(stderrLower, "not authenticated") ||
+	// Authentication errors: CLI prompts user to run 'claude auth'.
+	if strings.Contains(stderrLower, "not authenticated") ||
 		strings.Contains(stderrLower, "please run 'claude auth'") ||
-		strings.Contains(stderrLower, "authentication"):
+		strings.Contains(stderrLower, "authentication") {
 		return ErrNotAuthenticated
+	}
 
-	case strings.Contains(stderrLower, "rate limit") ||
-		strings.Contains(stderrLower, "too many requests"):
+	// Rate limit errors: API returns 429 or similar.
+	if strings.Contains(stderrLower, "rate limit") ||
+		strings.Contains(stderrLower, "too many requests") {
 		return ErrRateLimited
+	}
 
-	case stderr != "":
+	// Any other stderr output is treated as an error.
+	if stderr != "" {
 		return &Error{Message: strings.TrimSpace(stderr)}
 	}
 
