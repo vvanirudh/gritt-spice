@@ -225,21 +225,25 @@ func WrapText(text string, width int) string {
 	}
 
 	var result strings.Builder
-	paragraphs := strings.Split(text, "\n")
+	result.Grow(len(text))
 
-	for i, para := range paragraphs {
-		if i > 0 {
+	first := true
+	for text != "" {
+		var line string
+		line, text, _ = strings.Cut(text, "\n")
+
+		if !first {
 			result.WriteByte('\n')
 		}
+		first = false
 
 		// Preserve empty lines.
-		if strings.TrimSpace(para) == "" {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
 		// Wrap this paragraph.
-		wrapped := wrapParagraph(para, width)
-		result.WriteString(wrapped)
+		result.WriteString(wrapParagraph(line, width))
 	}
 
 	return result.String()
@@ -301,6 +305,11 @@ func FormatCommitMessage(subject, body string) string {
 	}
 
 	subject = truncateSubject(subject, commitLineWidth)
+
+	// Validate: subject must be non-empty after processing.
+	if subject == "" {
+		return ""
+	}
 
 	if body == "" {
 		return subject

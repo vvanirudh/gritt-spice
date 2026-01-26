@@ -73,6 +73,13 @@ var (
 	filePathRegex = regexp.MustCompile(`^\+\+\+ (?:"?b/(.+?)"?|/dev/null)$`)
 )
 
+// Capture group indices for diffHeaderRegex.
+// These must be updated if the regex pattern changes.
+const (
+	diffHeaderQuotedDest   = 2 // "b/path with spaces"
+	diffHeaderUnquotedDest = 4 // b/path
+)
+
 // ParseDiff parses a unified diff into per-file sections.
 func ParseDiff(diff string) ([]DiffFile, error) {
 	var files []DiffFile
@@ -93,16 +100,11 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 			}
 
 			// Extract destination path from diff header.
-			// Indices for capture groups in diffHeaderRegex.
-			const (
-				quotedDest   = 2 // "b/path with spaces"
-				unquotedDest = 4 // b/path
-			)
 			var destPath string
-			if len(matches) > quotedDest && matches[quotedDest] != "" {
-				destPath = matches[quotedDest]
-			} else if len(matches) > unquotedDest && matches[unquotedDest] != "" {
-				destPath = matches[unquotedDest]
+			if len(matches) > diffHeaderQuotedDest && matches[diffHeaderQuotedDest] != "" {
+				destPath = matches[diffHeaderQuotedDest]
+			} else if len(matches) > diffHeaderUnquotedDest && matches[diffHeaderUnquotedDest] != "" {
+				destPath = matches[diffHeaderUnquotedDest]
 			}
 
 			currentFile = &DiffFile{

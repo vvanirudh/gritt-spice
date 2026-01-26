@@ -57,6 +57,16 @@ func PrepareDiff(diffText string, opts *PrepareDiffOptions) (*PreparedDiff, erro
 		return nil, errors.New("no changes to process")
 	}
 
+	// Early size check to prevent OOM on huge diffs.
+	// This is a rough check; the actual limit is based on line count after filtering.
+	const maxRawDiffSize = 50 * 1024 * 1024 // 50 MB
+	if len(diffText) > maxRawDiffSize {
+		return nil, fmt.Errorf(
+			"diff too large (%d MB); use --from/--to to narrow the range",
+			len(diffText)/(1024*1024),
+		)
+	}
+
 	// Parse the diff.
 	files, err := ParseDiff(diffText)
 	if err != nil {

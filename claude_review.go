@@ -165,14 +165,21 @@ func (cmd *claudeReviewCmd) runPerBranch(
 		return fmt.Errorf("load branch graph: %w", err)
 	}
 
-	branches := collectBranchPath(graph, store.Trunk(), toRef)
-	if len(branches) == 0 {
+	pathResult := collectBranchPath(graph, store.Trunk(), toRef)
+	if len(pathResult.Branches) == 0 {
 		log.Info("No tracked branches found in range")
 		return cmd.runOverall(ctx, log, view, repo, client, cfg, fromRef, toRef, title)
 	}
+	if pathResult.Incomplete {
+		log.Warn("Branch path incomplete; branch not found in graph",
+			"branch", pathResult.MissingBranch)
+	}
 
+	// Review each branch individually.
+	// Note: Each branch's diff is unique (base...branch shows only that branch's
+	// changes), so there's no redundancy even for stacks.
 	var reviews []string
-	for _, branch := range branches {
+	for _, branch := range pathResult.Branches {
 		result, err := cmd.reviewSingleBranch(
 			ctx, log, view, repo, graph, store, client, cfg, branch,
 		)
@@ -414,27 +421,38 @@ Do not add any new functionality beyond what the review suggests.
 	return nil
 }
 
+// branchPathResult holds the result of collecting a branch path.
+type branchPathResult struct {
+	// Branches is the list of branches from trunk-adjacent to target.
+	Branches []string
+	// Incomplete is true if the path couldn't reach trunk (missing branch in graph).
+	Incomplete bool
+	// MissingBranch is the branch that wasn't found (only set if Incomplete).
+	MissingBranch string
+}
+
 // collectBranchPath collects branches from trunk to target in the branch graph.
 // Returns branches in stack order from bottom to top:
 // the branch closest to trunk is first, and the target branch is last.
 // The trunk branch itself is not included in the result.
-func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string {
-	// Collect branches in reverse order (target first), then reverse.
-	var branches []string
+func collectBranchPath(graph *spice.BranchGraph, trunk, target string) branchPathResult {
+	var result branchPathResult
 
 	current := target
 	for current != "" && current != trunk {
-		branches = append(branches, current)
+		result.Branches = append(result.Branches, current)
 
 		info, ok := graph.Lookup(current)
 		if !ok {
+			result.Incomplete = true
+			result.MissingBranch = current
 			break
 		}
 		current = info.Base
 	}
 
 	// Reverse to get trunk-adjacent first, target last.
-	slices.Reverse(branches)
+	slices.Reverse(result.Branches)
 
-	return branches
+	return result
 }

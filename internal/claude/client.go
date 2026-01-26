@@ -140,6 +140,10 @@ func (c *Client) SendPromptWithModel(ctx context.Context, prompt, model string) 
 
 	err = cmd.Run()
 	if err != nil {
+		// Check for context cancellation/timeout first.
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		// Check stderr for known error patterns.
 		if stderrErr := checkStderr(stderr.String()); stderrErr != nil {
 			return "", stderrErr
@@ -227,8 +231,9 @@ func (c *Client) IsAvailable() bool {
 // resolveBinaryPath resolves the Claude binary path, caching the result.
 // Thread-safety: This method is safe for concurrent use. The sync.Once
 // ensures the binary lookup is performed exactly once, regardless of how
-// many goroutines call this method concurrently. Subsequent calls return
-// the cached result immediately.
+// many goroutines call this method concurrently. The sync.Once.Do provides
+// a happens-before guarantee, so reads of resolvedPath/resolveErr after
+// Do returns are safe without additional synchronization.
 func (c *Client) resolveBinaryPath() (string, error) {
 	c.binaryOnce.Do(func() {
 		path := c.binaryPath
@@ -251,8 +256,11 @@ func (c *Client) resolveBinaryPath() (string, error) {
 	return c.resolvedPath, c.resolveErr
 }
 
-// limitedBuffer is a buffer that stops accepting writes after reaching a limit.
-// Data beyond the limit is discarded, but truncation is tracked via Truncated().
+// limitedBuffer is a buffer that enforces a strict memory limit.
+// The internal buffer will NEVER exceed the configured limit.
+//
+// Memory guarantee: buf.Len() <= limit, always. When the limit is reached,
+// additional data is discarded (not stored). Truncation is tracked via Truncated().
 //
 // This type returns len(p), nil even when data is discarded to prevent callers
 // (like exec.Cmd) from treating truncation as an error. Callers should check
@@ -263,19 +271,22 @@ type limitedBuffer struct {
 	truncated bool
 }
 
-// Write implements io.Writer with a size limit.
+// Write implements io.Writer with a strict size limit.
+// The buffer will never exceed its limit - excess data is discarded.
 // Returns len(p), nil always. Check Truncated() to detect data loss.
 func (b *limitedBuffer) Write(p []byte) (n int, err error) {
 	remaining := b.limit - b.buf.Len()
 	if remaining <= 0 {
+		// At limit: discard all data (nothing written to buf).
 		b.truncated = true
 		return len(p), nil
 	}
 	if len(p) <= remaining {
+		// Fits entirely: write all to buf.
 		_, err = b.buf.Write(p)
 		return len(p), err
 	}
-	// Partial fit: write what we can, mark as truncated.
+	// Partial fit: write only what fits, discard the rest.
 	b.truncated = true
 	_, err = b.buf.Write(p[:remaining])
 	return len(p), err
