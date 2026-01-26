@@ -165,7 +165,7 @@ func (cmd *commitCreateCmd) generateCommitMessage(
 	log.Info("Generating commit message with Claude...")
 	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Commit)
 	if err != nil {
-		return commitMessageResult{}, fmt.Errorf("run claude: %w", err)
+		return commitMessageResult{}, err
 	}
 
 	// Parse the response to extract subject and body.

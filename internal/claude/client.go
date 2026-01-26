@@ -99,10 +99,20 @@ func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string
 
 	err := cmd.Run()
 	if err != nil {
+		// Check stderr for known error patterns.
 		if stderrErr := checkStderr(stderr.String()); stderrErr != nil {
 			return "", stderrErr
 		}
-		return "", fmt.Errorf("run claude: %w", err)
+		// If stderr is empty, check if stdout has error info.
+		if stderr.Len() == 0 && stdout.Len() > 0 {
+			output := strings.TrimSpace(stdout.String())
+			// Limit output length for readability.
+			if len(output) > 200 {
+				output = output[:200] + "..."
+			}
+			return "", fmt.Errorf("claude: %s", output)
+		}
+		return "", fmt.Errorf("claude: %w", err)
 	}
 
 	return parseResponse(stdout.String()), nil

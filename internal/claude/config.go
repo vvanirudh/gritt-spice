@@ -65,8 +65,8 @@ type RefineOption struct {
 
 // Model constants for Claude CLI.
 const (
-	ModelSonnet = "claude-sonnet-4-20250514"
-	ModelHaiku  = "claude-haiku"
+	ModelSonnet = "claude-sonnet-4-5-20250929"
+	ModelHaiku  = "claude-haiku-4-5-20251001"
 )
 
 // DefaultConfig returns the default configuration.
@@ -229,9 +229,14 @@ Describe *what* this PR does.
 - [ ] Ran offline tests (describe commands)
 - [ ] Ran online tests (if applicable)`
 
-const defaultCommitPrompt = `Generate commit message for staged changes.
-Diff: {diff}
-Format: SUBJECT: <72 chars>, BODY: <details>`
+const defaultCommitPrompt = `Generate a git commit message for the following diff.
+
+Output ONLY in this exact format with no other text:
+SUBJECT: <imperative mood, max 72 chars>
+BODY: <optional details>
+
+Diff:
+{diff}`
 
 const defaultStackReviewPrompt = `Review this stack. Per-branch summary, then full stack summary.
 {branches}`
