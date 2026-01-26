@@ -53,6 +53,8 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 
 	var currentFile *DiffFile
 	var contentBuilder strings.Builder
+	// Pre-allocate capacity: estimate average file size as 1/10 of total.
+	contentBuilder.Grow(len(diff) / 10)
 
 	for i, line := range lines {
 		// Check for diff header (start of new file).

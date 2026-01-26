@@ -5,6 +5,8 @@ import (
 	"unicode"
 )
 
+// commitLineWidth is the conventional Git commit message line width.
+// This is a widely-adopted standard: git log, GitHub, etc. expect this width.
 const commitLineWidth = 72
 
 // BuildPrompt replaces placeholders in a template with provided values.
@@ -262,6 +264,8 @@ func FormatCommitMessage(subject, body string) string {
 				break
 			}
 		}
+		// If no space found (first word exceeds width), hard truncate.
+		// This preserves the invariant that subject <= commitLineWidth.
 		subject = strings.TrimSpace(subject[:cutoff])
 	}
 

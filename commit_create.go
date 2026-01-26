@@ -167,6 +167,16 @@ func (cmd *commitCreateCmd) generateCommitMessage(
 	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Commit)
 	fmt.Fprintln(view, "done")
 	if err != nil {
+		if errors.Is(err, claude.ErrNotAuthenticated) {
+			return commitMessageResult{}, errors.New(
+				"not authenticated with Claude; run 'claude auth' first",
+			)
+		}
+		if errors.Is(err, claude.ErrRateLimited) {
+			return commitMessageResult{}, errors.New(
+				"claude rate limit exceeded; try again later",
+			)
+		}
 		return commitMessageResult{}, err
 	}
 

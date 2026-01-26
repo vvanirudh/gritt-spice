@@ -175,6 +175,9 @@ func generatePRSummary(
 		base = baseOverride
 	} else {
 		base = store.Trunk()
+		if base == "" {
+			return "", "", errors.New("could not determine trunk branch")
+		}
 		if branchInfo, err := store.LookupBranch(ctx, branch); err == nil && branchInfo.Base != "" {
 			base = branchInfo.Base
 		}
@@ -229,6 +232,16 @@ func generatePRSummary(
 	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Summary)
 	fmt.Fprintln(view, "done")
 	if err != nil {
+		if errors.Is(err, claude.ErrNotAuthenticated) {
+			return "", "", errors.New(
+				"not authenticated with Claude; run 'claude auth' first",
+			)
+		}
+		if errors.Is(err, claude.ErrRateLimited) {
+			return "", "", errors.New(
+				"claude rate limit exceeded; try again later",
+			)
+		}
 		return "", "", err
 	}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.abhg.dev/gs/internal/silog"
@@ -53,6 +54,13 @@ type Client struct {
 	binaryPath string
 	timeout    time.Duration
 	log        *silog.Logger
+
+	// binaryOnce ensures binary path is resolved only once.
+	binaryOnce sync.Once
+	// resolvedPath is the cached binary path after resolution.
+	resolvedPath string
+	// resolveErr is the cached error from binary resolution.
+	resolveErr error
 }
 
 // NewClient creates a new Claude client.
@@ -93,18 +101,9 @@ func (c *Client) Run(ctx context.Context, prompt string) (string, error) {
 // RunWithModel executes a prompt using the Claude CLI with a specific model.
 // If model is empty, uses Claude's default model.
 func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string, error) {
-	binaryPath := c.binaryPath
-	if binaryPath == "" {
-		var err error
-		binaryPath, err = FindClaudeBinary()
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// Verify binary exists.
-	if _, err := os.Stat(binaryPath); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrNotInstalled, err)
+	binaryPath, err := c.resolveBinaryPath()
+	if err != nil {
+		return "", err
 	}
 
 	// Apply timeout to prevent indefinite hangs.
@@ -121,7 +120,7 @@ func (c *Client) RunWithModel(ctx context.Context, prompt, model string) (string
 	var stdout, stderr bytes.Buffer
 	cmd = cmd.WithStdout(&stdout).WithStderr(&stderr)
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		// Check stderr for known error patterns.
 		if stderrErr := checkStderr(stderr.String()); stderrErr != nil {
@@ -179,14 +178,30 @@ func checkStderr(stderr string) error {
 
 // IsAvailable checks if the Claude CLI is available.
 func (c *Client) IsAvailable() bool {
-	binaryPath := c.binaryPath
-	if binaryPath == "" {
-		var err error
-		binaryPath, err = FindClaudeBinary()
-		if err != nil {
-			return false
-		}
-	}
-	_, err := os.Stat(binaryPath)
+	_, err := c.resolveBinaryPath()
 	return err == nil
+}
+
+// resolveBinaryPath resolves the Claude binary path, caching the result.
+// This is thread-safe and will only perform the lookup once.
+func (c *Client) resolveBinaryPath() (string, error) {
+	c.binaryOnce.Do(func() {
+		path := c.binaryPath
+		if path == "" {
+			path, c.resolveErr = FindClaudeBinary()
+			if c.resolveErr != nil {
+				return
+			}
+		}
+
+		// Verify binary exists.
+		if _, err := os.Stat(path); err != nil {
+			c.resolveErr = fmt.Errorf("%w: %w", ErrNotInstalled, err)
+			return
+		}
+
+		c.resolvedPath = path
+	})
+
+	return c.resolvedPath, c.resolveErr
 }
