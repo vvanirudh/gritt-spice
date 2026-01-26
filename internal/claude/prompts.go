@@ -2,7 +2,10 @@ package claude
 
 import (
 	"strings"
+	"unicode"
 )
+
+const commitLineWidth = 72
 
 // BuildPrompt replaces placeholders in a template with provided values.
 // Placeholders are in the format {key}.
@@ -55,16 +58,16 @@ func RefinePrompt(original, instruction string) string {
 
 // ParseTitleBody extracts title and body from Claude's response.
 // It looks for "TITLE:" or "SUBJECT:" prefixes, with optional "BODY:" prefix.
-// Falls back to using first line as title, rest as body.
+// Falls back to using first non-preamble line as title, rest as body.
 func ParseTitleBody(response string) (title, body string) {
 	lines := strings.Split(strings.TrimSpace(response), "\n")
 	if len(lines) == 0 {
 		return response, ""
 	}
 
-	// Look for TITLE: or SUBJECT: prefix.
+	// Look for TITLE: or SUBJECT: prefix anywhere in the response.
 	for i, line := range lines {
-		lineLower := strings.ToLower(line)
+		lineLower := strings.ToLower(strings.TrimSpace(line))
 
 		var prefixLen int
 		switch {
@@ -76,37 +79,198 @@ func ParseTitleBody(response string) (title, body string) {
 			continue
 		}
 
-		title = strings.TrimSpace(line[prefixLen:])
+		// Found the title line - extract title after prefix.
+		trimmedLine := strings.TrimSpace(line)
+		title = strings.TrimSpace(trimmedLine[prefixLen:])
+
 		if i+1 < len(lines) {
-			// Skip empty lines and handle BODY: prefix.
+			// Process remaining lines for body.
 			remaining := lines[i+1:]
-			for j, l := range remaining {
-				lLower := strings.ToLower(l)
-				if strings.HasPrefix(lLower, "body:") {
-					// Extract body content after "body:" prefix.
-					bodyContent := strings.TrimSpace(l[5:])
-					if bodyContent != "" {
-						// Body content on same line as prefix.
-						remaining = append([]string{bodyContent}, remaining[j+1:]...)
-					} else {
-						remaining = remaining[j+1:]
-					}
-					break
-				}
-				if strings.TrimSpace(l) != "" {
-					remaining = remaining[j:]
-					break
-				}
-			}
+			remaining = extractBody(remaining)
 			body = strings.TrimSpace(strings.Join(remaining, "\n"))
 		}
 		return title, body
 	}
 
-	// Fallback: first line is title, rest is body.
-	title = lines[0]
-	if len(lines) > 1 {
-		body = strings.TrimSpace(strings.Join(lines[1:], "\n"))
+	// Fallback: skip common preamble patterns and use first real content line.
+	return parseFallback(lines)
+}
+
+// extractBody processes remaining lines after the title line.
+// It skips empty lines and handles BODY: prefix.
+func extractBody(lines []string) []string {
+	for i, line := range lines {
+		lineLower := strings.ToLower(strings.TrimSpace(line))
+
+		if strings.HasPrefix(lineLower, "body:") {
+			// Extract body content after "body:" prefix.
+			bodyContent := strings.TrimSpace(line[5:])
+			if bodyContent != "" {
+				return append([]string{bodyContent}, lines[i+1:]...)
+			}
+			return lines[i+1:]
+		}
+
+		// Skip empty lines before body content.
+		if strings.TrimSpace(line) != "" {
+			return lines[i:]
+		}
+	}
+	return nil
+}
+
+// parseFallback handles responses without TITLE:/SUBJECT: prefixes.
+// It skips common preamble patterns like "Based on..." or "Here's...".
+func parseFallback(lines []string) (title, body string) {
+	startIdx := 0
+
+	// Skip lines that look like preamble.
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		lower := strings.ToLower(trimmed)
+		if isPreambleLine(lower) {
+			startIdx = i + 1
+			continue
+		}
+
+		// Found first non-preamble line.
+		startIdx = i
+		break
+	}
+
+	if startIdx >= len(lines) {
+		// All lines were preamble, use first non-empty line.
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				return strings.TrimSpace(line), ""
+			}
+		}
+		return "", ""
+	}
+
+	title = strings.TrimSpace(lines[startIdx])
+	if startIdx+1 < len(lines) {
+		body = strings.TrimSpace(strings.Join(lines[startIdx+1:], "\n"))
 	}
 	return title, body
+}
+
+// isPreambleLine checks if a line looks like Claude's preamble text.
+func isPreambleLine(lower string) bool {
+	preamblePrefixes := []string{
+		"based on",
+		"here's",
+		"here is",
+		"i've analyzed",
+		"i have analyzed",
+		"after reviewing",
+		"looking at",
+		"from the diff",
+		"analyzing the",
+	}
+
+	for _, prefix := range preamblePrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+
+	// Also skip lines that end with colons (likely introductory statements).
+	if strings.HasSuffix(lower, ":") && len(lower) > 20 {
+		return true
+	}
+
+	return false
+}
+
+// WrapText wraps text to the specified width, preserving existing line breaks.
+// Used for formatting commit message bodies.
+func WrapText(text string, width int) string {
+	if width <= 0 {
+		width = commitLineWidth
+	}
+
+	var result strings.Builder
+	paragraphs := strings.Split(text, "\n")
+
+	for i, para := range paragraphs {
+		if i > 0 {
+			result.WriteByte('\n')
+		}
+
+		// Preserve empty lines.
+		if strings.TrimSpace(para) == "" {
+			continue
+		}
+
+		// Wrap this paragraph.
+		wrapped := wrapParagraph(para, width)
+		result.WriteString(wrapped)
+	}
+
+	return result.String()
+}
+
+// wrapParagraph wraps a single paragraph to the specified width.
+func wrapParagraph(text string, width int) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	lineLen := 0
+
+	for i, word := range words {
+		wordLen := len(word)
+
+		if i == 0 {
+			result.WriteString(word)
+			lineLen = wordLen
+			continue
+		}
+
+		// Check if adding this word exceeds width.
+		if lineLen+1+wordLen > width {
+			result.WriteByte('\n')
+			result.WriteString(word)
+			lineLen = wordLen
+		} else {
+			result.WriteByte(' ')
+			result.WriteString(word)
+			lineLen += 1 + wordLen
+		}
+	}
+
+	return result.String()
+}
+
+// FormatCommitMessage formats a commit subject and body into a proper message.
+// The subject is truncated to 72 chars if needed, and the body is wrapped.
+func FormatCommitMessage(subject, body string) string {
+	// Truncate subject if too long.
+	if len(subject) > commitLineWidth {
+		// Find last space before limit to avoid cutting words.
+		cutoff := commitLineWidth
+		for i := commitLineWidth - 1; i > 0; i-- {
+			if unicode.IsSpace(rune(subject[i])) {
+				cutoff = i
+				break
+			}
+		}
+		subject = strings.TrimSpace(subject[:cutoff])
+	}
+
+	if body == "" {
+		return subject
+	}
+
+	// Wrap the body text.
+	wrappedBody := WrapText(strings.TrimSpace(body), commitLineWidth)
+
+	return subject + "\n\n" + wrappedBody
 }
