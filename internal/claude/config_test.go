@@ -22,6 +22,11 @@ func TestLoadConfig(t *testing.T) {
 		assert.NotEmpty(t, cfg.Prompts.Summary)
 		assert.NotEmpty(t, cfg.Prompts.Commit)
 		assert.NotEmpty(t, cfg.Prompts.StackReview)
+
+		// Check default models.
+		assert.Equal(t, ModelSonnet, cfg.Models.Review)
+		assert.Equal(t, ModelHaiku, cfg.Models.Summary)
+		assert.Equal(t, ModelHaiku, cfg.Models.Commit)
 	})
 
 	t.Run("LoadFromFile", func(t *testing.T) {
@@ -82,6 +87,27 @@ refineOptions:
 		// Other fields should have defaults.
 		assert.NotEmpty(t, cfg.IgnorePatterns)
 		assert.NotEmpty(t, cfg.Prompts.Review)
+	})
+
+	t.Run("CustomModels", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "claude.yaml")
+
+		configContent := `
+models:
+  review: "custom-review-model"
+  summary: "custom-summary-model"
+  commit: "custom-commit-model"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfig(configPath)
+		require.NoError(t, err)
+
+		assert.Equal(t, "custom-review-model", cfg.Models.Review)
+		assert.Equal(t, "custom-summary-model", cfg.Models.Summary)
+		assert.Equal(t, "custom-commit-model", cfg.Models.Commit)
 	})
 
 	t.Run("InvalidYAML", func(t *testing.T) {

@@ -161,8 +161,11 @@ func generatePRSummary(
 		cfg = claude.DefaultConfig()
 	}
 
-	// Determine base branch.
+	// Determine base branch from tracked state, fallback to trunk.
 	base := store.Trunk()
+	if branchInfo, err := store.LookupBranch(ctx, branch); err == nil && branchInfo.Base != "" {
+		base = branchInfo.Base
+	}
 
 	// Get diff between base and branch.
 	diffText, err := repo.DiffText(ctx, base, branch)
@@ -210,56 +213,16 @@ func generatePRSummary(
 	prompt := claude.BuildSummaryPrompt(cfg, branch, base, commitSummary.String(), filteredDiff)
 
 	log.Info("Generating PR summary with Claude...")
-	response, err := client.Run(ctx, prompt)
+	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Summary)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("run claude: %w", err)
 	}
 
 	// Parse the response to extract title and body.
-	title, body = parseSummaryResponse(response)
+	title, body = claude.ParseTitleBody(response)
 
 	// Show preview and get user choice.
 	return showSummaryPreview(view, title, body)
-}
-
-// parseSummaryResponse extracts title and body from Claude's response.
-func parseSummaryResponse(response string) (title, body string) {
-	lines := strings.Split(strings.TrimSpace(response), "\n")
-	if len(lines) == 0 {
-		return response, ""
-	}
-
-	// Look for TITLE: prefix.
-	for i, line := range lines {
-		lineLower := strings.ToLower(line)
-		if strings.HasPrefix(lineLower, "title:") {
-			title = strings.TrimSpace(line[6:])
-			if i+1 < len(lines) {
-				// Skip empty lines and BODY: prefix.
-				remaining := lines[i+1:]
-				for j, l := range remaining {
-					lLower := strings.ToLower(l)
-					if strings.HasPrefix(lLower, "body:") {
-						remaining = remaining[j+1:]
-						break
-					}
-					if strings.TrimSpace(l) != "" {
-						remaining = remaining[j:]
-						break
-					}
-				}
-				body = strings.TrimSpace(strings.Join(remaining, "\n"))
-			}
-			return title, body
-		}
-	}
-
-	// Fallback: first line is title, rest is body.
-	title = lines[0]
-	if len(lines) > 1 {
-		body = strings.TrimSpace(strings.Join(lines[1:], "\n"))
-	}
-	return title, body
 }
 
 // showSummaryPreview shows the generated PR summary and lets user accept/edit.
@@ -303,9 +266,7 @@ func showSummaryPreview(view ui.View, title, body string) (string, string, error
 	switch selected {
 	case choiceAccept:
 		return title, body, nil
-	case choiceCancel:
+	default: // choiceCancel
 		return "", "", nil
 	}
-
-	return title, body, nil
 }
