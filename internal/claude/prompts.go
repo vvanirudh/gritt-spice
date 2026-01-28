@@ -185,11 +185,6 @@ func parseFallback(lines []string) (title, body string) {
 }
 
 // isPreambleLine checks if a line looks like Claude's preamble text.
-//
-// NOTE: This heuristic is fragile and may need updates if Claude changes
-// its output format. The prompts request specific formats (TITLE:/BODY:),
-// but Claude occasionally adds introductory text. If parsing issues occur,
-// check if Claude is using new preamble patterns and add them here.
 func isPreambleLine(lower string) bool {
 	preamblePrefixes := []string{
 		"based on",

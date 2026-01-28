@@ -37,39 +37,19 @@ type BudgetResult struct {
 
 var (
 	// diffHeaderRegex matches the start of a new file diff.
-	//
-	// Git uses two formats for diff headers:
-	//   - Unquoted: diff --git a/file.go b/file.go
-	//   - Quoted:   diff --git "a/path with spaces.go" "b/path with spaces.go"
-	//
-	// The regex uses alternation to match both formats:
-	//   Pattern: (?:"?a/(.+?)"? "?b/(.+?)"?|a/(.+?) b/(.+?))
-	//            |<---- quoted format ---->|<-- unquoted -->|
-	//
-	// Capture groups (1-indexed):
-	//   [1] quoted source path      - e.g., "path with spaces.go" from "a/..."
-	//   [2] quoted destination path - e.g., "path with spaces.go" from "b/..."
-	//   [3] unquoted source path    - e.g., "file.go" from a/file.go
-	//   [4] unquoted destination    - e.g., "file.go" from b/file.go
-	//
-	// Either [1,2] or [3,4] will be populated, never both.
-	// We use [2] or [4] to get the destination path (the file after changes).
+	// Capture groups:
+	//   [1] quoted source path (a/...)
+	//   [2] quoted destination path (b/...)
+	//   [3] unquoted source path (a/...)
+	//   [4] unquoted destination path (b/...)
+	// Either [1,2] or [3,4] will be populated, not both.
 	diffHeaderRegex = regexp.MustCompile(`^diff --git (?:"?a/(.+?)"? "?b/(.+?)"?|a/(.+?) b/(.+?))$`)
 
-	// binaryFileRegex matches binary file markers in git diff output.
-	// Example: "Binary files a/image.png and b/image.png differ"
+	// binaryFileRegex matches binary file markers.
 	binaryFileRegex = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
 
-	// filePathRegex matches +++ lines to extract the definitive file path.
-	//
-	// The +++ line is more reliable than the diff header because it shows
-	// the actual destination path. Format:
-	//   - Normal:  +++ b/file.go
-	//   - Quoted:  +++ "b/path with spaces.go"
-	//   - Deleted: +++ /dev/null
-	//
-	// Capture group [1] contains the path without "b/" prefix.
-	// For deleted files (/dev/null), the group is empty.
+	// filePathRegex matches +++ lines to extract file paths.
+	// Capture group [1] contains the destination path (b/...).
 	filePathRegex = regexp.MustCompile(`^\+\+\+ (?:"?b/(.+?)"?|/dev/null)$`)
 )
 
