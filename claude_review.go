@@ -440,12 +440,11 @@ Do not add any new functionality beyond what the review suggests.
 // the branch closest to trunk is first, and the target branch is last.
 // The trunk branch itself is not included in the result.
 func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string {
-	// Collect branches in reverse order (target first), then reverse.
 	var branches []string
 
 	current := target
 	for current != "" && current != trunk {
-		branches = append(branches, current)
+		branches = append([]string{current}, branches...)
 
 		info, ok := graph.Lookup(current)
 		if !ok {
@@ -453,9 +452,6 @@ func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string 
 		}
 		current = info.Base
 	}
-
-	// Reverse to get trunk-adjacent first, target last.
-	slices.Reverse(branches)
 
 	return branches
 }
