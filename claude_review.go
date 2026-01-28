@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -321,7 +320,7 @@ func (cmd *claudeReviewCmd) handleOverBudget(view ui.View, budget claude.BudgetR
 	fmt.Fprintln(view, "")
 	fmt.Fprintln(view, "Options:")
 	fmt.Fprintln(view, "  1. Narrow range with --from/--to")
-	fmt.Fprintln(view, "  2. Large files (add to ignorePatterns):")
+	fmt.Fprintln(view, "  2. Large files:")
 
 	// Sort files by line count (descending).
 	type fileEntry struct {
@@ -336,20 +335,14 @@ func (cmd *claudeReviewCmd) handleOverBudget(view ui.View, budget claude.BudgetR
 		return cmp.Compare(b.lines, a.lines) // descending
 	})
 
-	// Show top N largest files with suggested ignore patterns.
+	// Show top N largest files.
 	const maxFilesToShow = 5
 	for i := range min(len(entries), maxFilesToShow) {
-		e := entries[i]
-		ext := filepath.Ext(e.path)
-		if ext != "" {
-			fmt.Fprintf(view, "     - %s (%d lines) → add '*%s'\n", e.path, e.lines, ext)
-		} else {
-			fmt.Fprintf(view, "     - %s (%d lines)\n", e.path, e.lines)
-		}
+		fmt.Fprintf(view, "     - %s (%d lines)\n", entries[i].path, entries[i].lines)
 	}
 
 	fmt.Fprintln(view, "")
-	fmt.Fprintln(view, "Config file:", claude.DefaultConfigPath())
+	fmt.Fprintln(view, "Add patterns to ignorePatterns in:", claude.DefaultConfigPath())
 
 	return errors.New("diff exceeds budget")
 }
@@ -424,9 +417,7 @@ Do not add any new functionality beyond what the review suggests.
 }
 
 // collectBranchPath collects branches from trunk to target in the branch graph.
-// Returns branches in stack order from bottom to top:
-// the branch closest to trunk is first, and the target branch is last.
-// The trunk branch itself is not included in the result.
+// Returns branches in bottom-up order (closest to trunk first, target last).
 func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string {
 	var branches []string
 
