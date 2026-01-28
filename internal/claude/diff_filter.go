@@ -37,19 +37,12 @@ type BudgetResult struct {
 
 var (
 	// diffHeaderRegex matches the start of a new file diff.
-	// Capture groups:
-	//   [1] quoted source path (a/...)
-	//   [2] quoted destination path (b/...)
-	//   [3] unquoted source path (a/...)
-	//   [4] unquoted destination path (b/...)
-	// Either [1,2] or [3,4] will be populated, not both.
 	diffHeaderRegex = regexp.MustCompile(`^diff --git (?:"?a/(.+?)"? "?b/(.+?)"?|a/(.+?) b/(.+?))$`)
 
 	// binaryFileRegex matches binary file markers.
 	binaryFileRegex = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
 
 	// filePathRegex matches +++ lines to extract file paths.
-	// Capture group [1] contains the destination path (b/...).
 	filePathRegex = regexp.MustCompile(`^\+\+\+ (?:"?b/(.+?)"?|/dev/null)$`)
 )
 
@@ -72,17 +65,15 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 				files = append(files, *currentFile)
 			}
 
-			// Extract destination path from diff header.
-			// Indices for capture groups in diffHeaderRegex.
-			const (
-				quotedDest   = 2 // "b/path with spaces"
-				unquotedDest = 4 // b/path
-			)
+			// Extract path from diff header.
+			// matches[1] and matches[2] are for quoted paths.
+			// matches[3] and matches[4] are for unquoted paths.
+			// Regex has 5 capture groups (0=full match, 1-4=groups).
 			var destPath string
-			if len(matches) > quotedDest && matches[quotedDest] != "" {
-				destPath = matches[quotedDest]
-			} else if len(matches) > unquotedDest && matches[unquotedDest] != "" {
-				destPath = matches[unquotedDest]
+			if len(matches) > 2 && matches[2] != "" {
+				destPath = matches[2]
+			} else if len(matches) > 4 && matches[4] != "" {
+				destPath = matches[4]
 			}
 
 			currentFile = &DiffFile{

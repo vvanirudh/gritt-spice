@@ -141,7 +141,7 @@ func (cmd *commitCreateCmd) generateCommitMessage(
 	prompt := claude.BuildCommitPrompt(prepared.Config, prepared.FilteredDiff)
 
 	fmt.Fprint(view, "Generating commit message with Claude... ")
-	response, err := prepared.Client.SendPromptWithModel(
+	response, err := prepared.Client.RunWithModel(
 		ctx, prompt, prepared.Config.Models.Commit,
 	)
 	fmt.Fprintln(view, "done")

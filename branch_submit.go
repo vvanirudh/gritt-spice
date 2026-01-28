@@ -165,11 +165,7 @@ func generatePRSummary(
 		if base == "" {
 			return "", "", errors.New("could not determine trunk branch")
 		}
-		branchInfo, err := store.LookupBranch(ctx, branch)
-		if err != nil {
-			log.Warn("Could not look up branch, using trunk as base",
-				"branch", branch, "error", err)
-		} else if branchInfo.Base != "" {
+		if branchInfo, err := store.LookupBranch(ctx, branch); err == nil && branchInfo.Base != "" {
 			base = branchInfo.Base
 		}
 	}
@@ -211,7 +207,7 @@ func generatePRSummary(
 	)
 
 	fmt.Fprint(view, "Generating PR summary with Claude... ")
-	response, err := prepared.Client.SendPromptWithModel(
+	response, err := prepared.Client.RunWithModel(
 		ctx, prompt, prepared.Config.Models.Summary,
 	)
 	fmt.Fprintln(view, "done")

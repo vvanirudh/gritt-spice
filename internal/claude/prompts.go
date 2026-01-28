@@ -274,8 +274,6 @@ func FormatCommitMessage(subject, body string) string {
 	}
 
 	// Truncate subject if too long.
-	// Note: This operates on bytes, not runes. Multi-byte UTF-8 characters
-	// may be split incorrectly, but this is rare in practice for commit subjects.
 	if len(subject) > commitLineWidth {
 		// Find last space before limit to avoid cutting words.
 		cutoff := commitLineWidth
@@ -285,11 +283,9 @@ func FormatCommitMessage(subject, body string) string {
 				break
 			}
 		}
+		// If no space found (first word exceeds width), hard truncate.
+		// This preserves the invariant that subject <= commitLineWidth.
 		subject = strings.TrimSpace(subject[:cutoff])
-		// Enforce hard limit even after TrimSpace.
-		if len(subject) > commitLineWidth {
-			subject = subject[:commitLineWidth]
-		}
 	}
 
 	if body == "" {
