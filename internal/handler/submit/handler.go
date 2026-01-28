@@ -339,10 +339,6 @@ type Request struct {
 	// Title and Body are the title and body of the change request.
 	Title, Body string // optional
 
-	// Base is an optional base branch override.
-	// If set, this base branch is used instead of the tracked base.
-	Base string // optional
-
 	// Options are the options for the submit operation.
 	Options *Options // optional
 }
@@ -359,7 +355,6 @@ func (h *Handler) Submit(ctx context.Context, req *Request) error {
 			Options: opts,
 			Title:   req.Title,
 			Body:    req.Body,
-			Base:    req.Base,
 		},
 	)
 	if err != nil {
@@ -396,7 +391,6 @@ type submitOptions struct {
 	*Options
 
 	Title, Body string
-	Base        string // optional override for base branch
 }
 
 func (h *Handler) submitBranch(
@@ -467,17 +461,10 @@ func (h *Handler) submitBranch(
 		}
 	}
 
-	// Determine the upstream base branch.
-	// Priority: explicit override > base's upstream name > tracked base.
-	upstreamBase := opts.Base
-	switch {
-	case opts.Base != "":
-		log.Infof("%v: Using base branch override: %v", branchToSubmit, upstreamBase)
-
-	case branch.Base == h.Store.Trunk():
-		upstreamBase = branch.Base
-
-	default:
+	// Similarly, if the branch's base has a different name upstream,
+	// use that name instead.
+	upstreamBase := branch.Base
+	if branch.Base != h.Store.Trunk() {
 		baseBranch, err := svc.LookupBranch(ctx, branch.Base)
 		if err != nil {
 			return status, fmt.Errorf("lookup base branch: %w", err)
@@ -896,15 +883,6 @@ func (h *Handler) submitBranch(
 			}
 		}
 
-		// Check for title/body updates.
-		if opts.Title != "" && opts.Title != pull.Subject {
-			updates = append(updates, "update title")
-		}
-		if opts.Body != "" {
-			// Always update body if provided (we can't compare with existing).
-			updates = append(updates, "update body")
-		}
-
 		if len(updates) == 0 {
 			log.Infof("CR %v is up-to-date: %s", pull.ID, pull.URL)
 			return status, nil
@@ -943,9 +921,7 @@ func (h *Handler) submitBranch(
 		}
 
 		if len(updates) > 0 {
-			editOpts := forge.EditChangeOptions{
-				Title:        opts.Title,
-				Body:         opts.Body,
+			opts := forge.EditChangeOptions{
 				Base:         upstreamBase,
 				Draft:        opts.Draft,
 				AddLabels:    opts.Labels,
@@ -959,7 +935,7 @@ func (h *Handler) submitBranch(
 				return status, fmt.Errorf("edit CR %v: %w", pull.ID, err)
 			}
 
-			if err := remoteRepo.EditChange(ctx, pull.ID, editOpts); err != nil {
+			if err := remoteRepo.EditChange(ctx, pull.ID, opts); err != nil {
 				return status, fmt.Errorf("edit CR %v: %w", pull.ID, err)
 			}
 		}
