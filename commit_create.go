@@ -143,8 +143,7 @@ func (cmd *commitCreateCmd) generateCommitMessage(
 	// Parse and filter the diff.
 	files, err := claude.ParseDiff(diffText)
 	if err != nil {
-		return commitMessageResult{},
-			fmt.Errorf("parse diff: %w (check for unusual file names or binary files)", err)
+		return commitMessageResult{}, fmt.Errorf("parse diff: %w", err)
 	}
 
 	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
