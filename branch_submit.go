@@ -130,9 +130,6 @@ func (cmd *branchSubmitCmd) Run(
 	if cmd.ClaudeSummary && title != "" {
 		log.Warn("--claude-summary ignored because --title was provided")
 	}
-	if cmd.ClaudeSummary && title == "" && body != "" {
-		log.Warn("--body will be overwritten by --claude-summary")
-	}
 	if cmd.ClaudeSummary && title == "" {
 		var err error
 		title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch, cmd.Base)

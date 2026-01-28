@@ -119,9 +119,8 @@ func (c *Client) SendPromptWithModel(ctx context.Context, prompt, model string) 
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	// Prepare command with -p flag for prompt and --print for non-interactive mode.
-	// The --print flag ensures the CLI outputs the response without interactive prompts.
-	args := []string{"-p", prompt, "--print"}
+	// Prepare command with -p flag for prompt.
+	args := []string{"-p", prompt}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
@@ -237,34 +236,21 @@ func (c *Client) resolveBinaryPath() (string, error) {
 
 // limitedBuffer is a buffer that stops accepting writes after reaching a limit.
 // It silently discards data beyond the limit to prevent memory exhaustion.
-//
-// IMPORTANT: This type intentionally violates the io.Writer contract by returning
-// len(p), nil even when data is discarded. This is by design to prevent callers
-// (like exec.Cmd) from treating truncation as an error. Use only for scenarios
-// where silent truncation is acceptable, such as capturing CLI output.
 type limitedBuffer struct {
 	buf   bytes.Buffer
 	limit int
 }
 
 // Write implements io.Writer with a size limit.
-// Returns len(p), nil always to indicate success, even when data is discarded.
-// This intentionally violates the io.Writer contract to prevent callers from
-// treating truncation as an error.
 func (b *limitedBuffer) Write(p []byte) (n int, err error) {
 	remaining := b.limit - b.buf.Len()
 	if remaining <= 0 {
-		// At limit: silently discard all data.
-		return len(p), nil
+		return len(p), nil // Silently discard
 	}
-	if len(p) <= remaining {
-		// Fits entirely: write all.
-		_, err = b.buf.Write(p)
-		return len(p), err
+	if len(p) > remaining {
+		p = p[:remaining]
 	}
-	// Partial fit: write what we can, report full success.
-	_, err = b.buf.Write(p[:remaining])
-	return len(p), err
+	return b.buf.Write(p)
 }
 
 // String returns the buffered content.
