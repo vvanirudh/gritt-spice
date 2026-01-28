@@ -14,10 +14,6 @@ import (
 	"go.abhg.dev/gs/internal/xec"
 )
 
-// maxOutputSize is the maximum size of stdout/stderr buffers (10 MB).
-// This prevents memory exhaustion from malicious or runaway CLI output.
-const maxOutputSize = 10 * 1024 * 1024
-
 // Sentinel errors for Claude client operations.
 var (
 	// ErrNotInstalled indicates the Claude CLI is not installed.
@@ -126,10 +122,8 @@ func (c *Client) SendPromptWithModel(ctx context.Context, prompt, model string) 
 	}
 	cmd := xec.Command(ctx, c.log, binaryPath, args...)
 
-	// Use limited buffers to prevent memory exhaustion.
-	stdout := &limitedBuffer{limit: maxOutputSize}
-	stderr := &limitedBuffer{limit: maxOutputSize}
-	cmd = cmd.WithStdout(stdout).WithStderr(stderr)
+	var stdout, stderr bytes.Buffer
+	cmd = cmd.WithStdout(&stdout).WithStderr(&stderr)
 
 	err = cmd.Run()
 	if err != nil {
@@ -208,10 +202,7 @@ func (c *Client) IsAvailable() bool {
 }
 
 // resolveBinaryPath resolves the Claude binary path, caching the result.
-// Thread-safety: This method is safe for concurrent use. The sync.Once
-// ensures the binary lookup is performed exactly once, regardless of how
-// many goroutines call this method concurrently. Subsequent calls return
-// the cached result immediately.
+// This is thread-safe and will only perform the lookup once.
 func (c *Client) resolveBinaryPath() (string, error) {
 	c.binaryOnce.Do(func() {
 		path := c.binaryPath
@@ -232,33 +223,4 @@ func (c *Client) resolveBinaryPath() (string, error) {
 	})
 
 	return c.resolvedPath, c.resolveErr
-}
-
-// limitedBuffer is a buffer that stops accepting writes after reaching a limit.
-// It silently discards data beyond the limit to prevent memory exhaustion.
-type limitedBuffer struct {
-	buf   bytes.Buffer
-	limit int
-}
-
-// Write implements io.Writer with a size limit.
-func (b *limitedBuffer) Write(p []byte) (n int, err error) {
-	remaining := b.limit - b.buf.Len()
-	if remaining <= 0 {
-		return len(p), nil // Silently discard
-	}
-	if len(p) > remaining {
-		p = p[:remaining]
-	}
-	return b.buf.Write(p)
-}
-
-// String returns the buffered content.
-func (b *limitedBuffer) String() string {
-	return b.buf.String()
-}
-
-// Len returns the current buffer length.
-func (b *limitedBuffer) Len() int {
-	return b.buf.Len()
 }

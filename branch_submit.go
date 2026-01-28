@@ -15,9 +15,6 @@ import (
 	"go.abhg.dev/gs/internal/ui"
 )
 
-// errSummaryCancelled indicates the user cancelled PR summary generation.
-var errSummaryCancelled = errors.New("summary cancelled")
-
 // submitOptions defines options that are common to all submit commands.
 type submitOptions struct {
 	submit.Options
@@ -127,20 +124,15 @@ func (cmd *branchSubmitCmd) Run(
 	body := cmd.Body
 
 	// Generate PR summary with Claude if requested.
-	if cmd.ClaudeSummary && title != "" {
-		log.Warn("--claude-summary ignored because --title was provided")
-	}
 	if cmd.ClaudeSummary && title == "" {
 		var err error
 		title, body, err = generatePRSummary(ctx, log, view, repo, store, cmd.Branch, cmd.Base)
 		if err != nil {
-			if errors.Is(err, errSummaryCancelled) {
-				return err
-			}
 			return fmt.Errorf("generate PR summary: %w", err)
 		}
-		// Empty title with no error means no diff available;
-		// continue with submit (will prompt for metadata).
+		if title == "" {
+			return errors.New("submit cancelled")
+		}
 	}
 
 	return submitHandler.Submit(ctx, &submit.Request{
@@ -189,11 +181,7 @@ func generatePRSummary(
 	}
 
 	if diffText == "" {
-		// No code changes, but allow the submit to continue
-		// (PR metadata can still be updated).
-		log.Warn("No changes to summarize; " +
-			"--claude-summary requires code changes to generate a summary")
-		return "", "", nil
+		return "", "", errors.New("no changes to submit")
 	}
 
 	// Prepare diff for Claude.
@@ -280,6 +268,6 @@ func showSummaryPreview(view ui.View, title, body string) (string, string, error
 	case choiceAccept:
 		return title, body, nil
 	default: // choiceCancel
-		return "", "", errSummaryCancelled
+		return "", "", nil
 	}
 }

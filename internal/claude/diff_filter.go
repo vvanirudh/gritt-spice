@@ -63,7 +63,7 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 	// Pre-allocate capacity: estimate average file size as 1/10 of total.
 	contentBuilder.Grow(len(diff) / 10)
 
-	for _, line := range lines {
+	for i, line := range lines {
 		// Check for diff header (start of new file).
 		if matches := diffHeaderRegex.FindStringSubmatch(line); matches != nil {
 			// Save previous file if exists.
@@ -114,13 +114,15 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 		// Add line to current file's content.
 		if currentFile != nil {
 			contentBuilder.WriteString(line)
-			contentBuilder.WriteByte('\n')
+			if i < len(lines)-1 {
+				contentBuilder.WriteByte('\n')
+			}
 		}
 	}
 
-	// Save last file, trimming trailing newline for consistency.
+	// Save last file.
 	if currentFile != nil {
-		currentFile.Content = strings.TrimSuffix(contentBuilder.String(), "\n")
+		currentFile.Content = contentBuilder.String()
 		files = append(files, *currentFile)
 	}
 
@@ -155,8 +157,7 @@ func matchesAnyPattern(path string, patterns []string) bool {
 	// Clean the path and reject absolute paths or paths with "..".
 	path = filepath.Clean(path)
 	if filepath.IsAbs(path) || strings.HasPrefix(path, "..") {
-		// Invalid/suspicious path - filter it out for security.
-		return true
+		return false // Invalid path, treat as no match
 	}
 
 	for _, pattern := range patterns {
