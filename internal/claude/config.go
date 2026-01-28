@@ -17,26 +17,11 @@ type Config struct {
 	// IgnorePatterns is a list of glob patterns for files to exclude.
 	IgnorePatterns []string `yaml:"ignorePatterns"`
 
-	// Models configures which Claude model to use for different operations.
-	Models Models `yaml:"models"`
-
 	// Prompts contains the prompt templates for different operations.
 	Prompts Prompts `yaml:"prompts"`
 
 	// RefineOptions is a list of quick refinement options.
 	RefineOptions []RefineOption `yaml:"refineOptions"`
-}
-
-// Models configures which Claude model to use for different operations.
-type Models struct {
-	// Review is the model for code review (default: claude-sonnet-4-20250514).
-	Review string `yaml:"review"`
-
-	// Summary is the model for PR/commit summaries (default: claude-haiku).
-	Summary string `yaml:"summary"`
-
-	// Commit is the model for commit messages (default: claude-haiku).
-	Commit string `yaml:"commit"`
 }
 
 // Prompts contains prompt templates for Claude operations.
@@ -63,12 +48,6 @@ type RefineOption struct {
 	Prompt string `yaml:"prompt"`
 }
 
-// Model constants for Claude CLI.
-const (
-	ModelSonnet = "claude-sonnet-4-20250514"
-	ModelHaiku  = "claude-haiku"
-)
-
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
@@ -83,11 +62,6 @@ func DefaultConfig() *Config {
 			"*_generated.go",
 			"vendor/*",
 			"node_modules/*",
-		},
-		Models: Models{
-			Review:  ModelSonnet, // Sonnet for thorough code review
-			Summary: ModelHaiku,  // Haiku for fast summary generation
-			Commit:  ModelHaiku,  // Haiku for fast commit messages
 		},
 		Prompts: Prompts{
 			Review:      defaultReviewPrompt,
@@ -154,15 +128,6 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if len(fileCfg.IgnorePatterns) > 0 {
 		cfg.IgnorePatterns = fileCfg.IgnorePatterns
-	}
-	if fileCfg.Models.Review != "" {
-		cfg.Models.Review = fileCfg.Models.Review
-	}
-	if fileCfg.Models.Summary != "" {
-		cfg.Models.Summary = fileCfg.Models.Summary
-	}
-	if fileCfg.Models.Commit != "" {
-		cfg.Models.Commit = fileCfg.Models.Commit
 	}
 	if fileCfg.Prompts.Review != "" {
 		cfg.Prompts.Review = fileCfg.Prompts.Review

@@ -55,6 +55,7 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 	var contentBuilder strings.Builder
 
 	for i, line := range lines {
+
 		// Check for diff header (start of new file).
 		if matches := diffHeaderRegex.FindStringSubmatch(line); matches != nil {
 			// Save previous file if exists.

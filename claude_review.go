@@ -1,11 +1,9 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"go.abhg.dev/gs/internal/claude"
@@ -22,7 +20,6 @@ type claudeReviewCmd struct {
 	To        string `help:"End of the range to review (defaults to current branch)"`
 	PerBranch bool   `help:"Review each branch individually, then provide an overall summary"`
 	Title     string `help:"Title for the review (defaults to branch name or range)"`
-	Fix       bool   `help:"After review, prompt to apply suggested fixes"`
 }
 
 func (*claudeReviewCmd) Help() string {
@@ -142,7 +139,7 @@ func (cmd *claudeReviewCmd) runOverall(
 	prompt := claude.BuildReviewPrompt(cfg, title, filteredDiff)
 
 	log.Info("Sending to Claude for review...")
-	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+	response, err := client.Run(ctx, prompt)
 	if err != nil {
 		return cmd.handleClaudeError(err)
 	}
@@ -152,11 +149,6 @@ func (cmd *claudeReviewCmd) runOverall(
 	fmt.Fprintln(view, "=== Claude Review ===")
 	fmt.Fprintln(view, "")
 	fmt.Fprintln(view, response)
-
-	// Offer to apply fixes if requested.
-	if cmd.Fix && ui.Interactive(view) {
-		return cmd.offerFixes(ctx, log, view, client, cfg, response, filteredDiff)
-	}
 
 	return nil
 }
@@ -179,7 +171,10 @@ func (cmd *claudeReviewCmd) runPerBranch(
 	}
 
 	// Find the path from fromRef to toRef.
-	branches := collectBranchPath(graph, store.Trunk(), toRef)
+	branches, err := collectBranchPath(graph, store.Trunk(), toRef)
+	if err != nil {
+		return fmt.Errorf("find branch path: %w", err)
+	}
 
 	if len(branches) == 0 {
 		log.Info("No tracked branches found in range")
@@ -235,7 +230,7 @@ func (cmd *claudeReviewCmd) runPerBranch(
 		filteredDiff := claude.ReconstructDiff(filtered)
 		prompt := claude.BuildReviewPrompt(cfg, branch, filteredDiff)
 
-		response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+		response, err := client.Run(ctx, prompt)
 		if err != nil {
 			return cmd.handleClaudeError(err)
 		}
@@ -255,7 +250,7 @@ func (cmd *claudeReviewCmd) runPerBranch(
 		stackSummary := strings.Join(reviews, "\n\n---\n\n")
 		prompt := claude.BuildStackReviewPrompt(cfg, stackSummary)
 
-		response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
+		response, err := client.Run(ctx, prompt)
 		if err != nil {
 			return cmd.handleClaudeError(err)
 		}
@@ -276,7 +271,7 @@ func (cmd *claudeReviewCmd) handleOverBudget(view ui.View, budget claude.BudgetR
 	fmt.Fprintln(view, "  1. Narrow range with --from/--to")
 	fmt.Fprintln(view, "  2. Large files:")
 
-	// Sort files by line count (descending).
+	// Sort files by line count.
 	type fileEntry struct {
 		path  string
 		lines int
@@ -285,12 +280,14 @@ func (cmd *claudeReviewCmd) handleOverBudget(view ui.View, budget claude.BudgetR
 	for path, lines := range budget.FileLines {
 		entries = append(entries, fileEntry{path, lines})
 	}
-	slices.SortFunc(entries, func(a, b fileEntry) int {
-		return cmp.Compare(b.lines, a.lines) // descending
-	})
 
 	// Show top 5 largest files.
-	for i := range min(len(entries), 5) {
+	for i := 0; i < len(entries) && i < 5; i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[j].lines > entries[i].lines {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
 		fmt.Fprintf(view, "     - %s (%d lines)\n", entries[i].path, entries[i].lines)
 	}
 
@@ -311,66 +308,8 @@ func (cmd *claudeReviewCmd) handleClaudeError(err error) error {
 	}
 }
 
-func (cmd *claudeReviewCmd) offerFixes(
-	ctx context.Context,
-	log *silog.Logger,
-	view ui.View,
-	client *claude.Client,
-	cfg *claude.Config,
-	review, diff string,
-) error {
-	fmt.Fprintln(view, "")
-
-	type choice int
-	const (
-		choiceApply choice = iota
-		choiceSkip
-	)
-
-	var selected choice
-	field := ui.NewSelect[choice]().
-		WithTitle("Apply fixes?").
-		WithValue(&selected).
-		WithOptions(
-			ui.SelectOption[choice]{Label: "Apply suggested fixes", Value: choiceApply},
-			ui.SelectOption[choice]{Label: "Skip", Value: choiceSkip},
-		)
-
-	if err := ui.Run(view, field); err != nil {
-		return err
-	}
-
-	if selected == choiceSkip {
-		return nil
-	}
-
-	// Build fix prompt with review context.
-	fixPrompt := `Based on the following code review, apply the suggested fixes.
-Only modify files that need changes based on the review.
-Do not add any new functionality beyond what the review suggests.
-
-## Review:
-` + review + `
-
-## Current diff:
-` + diff
-
-	log.Info("Applying fixes with Claude...")
-	response, err := client.RunWithModel(ctx, fixPrompt, cfg.Models.Review)
-	if err != nil {
-		return cmd.handleClaudeError(err)
-	}
-
-	fmt.Fprintln(view, "")
-	fmt.Fprintln(view, "=== Applied Fixes ===")
-	fmt.Fprintln(view, "")
-	fmt.Fprintln(view, response)
-
-	return nil
-}
-
 // collectBranchPath collects branches from trunk to target in the branch graph.
-func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string {
+func collectBranchPath(graph *spice.BranchGraph, trunk, target string) ([]string, error) {
 	var branches []string
 
 	current := target
@@ -384,5 +323,5 @@ func collectBranchPath(graph *spice.BranchGraph, trunk, target string) []string 
 		current = info.Base
 	}
 
-	return branches
+	return branches, nil
 }
