@@ -34,6 +34,9 @@ func (e *Error) Error() string {
 	return "claude: " + e.Message
 }
 
+// DefaultTimeout is the default timeout for Claude API calls.
+const DefaultTimeout = 5 * time.Minute
+
 // ClientOptions configures the Claude client.
 type ClientOptions struct {
 	// BinaryPath is the path to the claude binary.

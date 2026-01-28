@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -63,9 +62,6 @@ type RefineOption struct {
 	// Prompt is the instruction to append for refinement.
 	Prompt string `yaml:"prompt"`
 }
-
-// DefaultTimeout is the default timeout for Claude API calls.
-const DefaultTimeout = 5 * time.Minute
 
 // Model constants for Claude CLI.
 // Format: claude-{model}-{major}-{minor}-{date}
@@ -256,23 +252,9 @@ Describe *what* this PR does.
 
 const defaultCommitPrompt = `Generate a git commit message for the following diff.
 
-Output ONLY in this exact format:
-SUBJECT: <one line, imperative mood, max 50 chars>
-BODY:
-<bullet points, each line max 72 chars>
-
-Example:
-SUBJECT: Add user authentication
-BODY:
-- Add login/logout endpoints
-- Implement JWT token validation
-- Add password hashing with bcrypt
-
-Rules:
-- Subject: imperative mood ("Add" not "Added"), max 50 chars
-- Body: bullet points starting with "- ", explain WHY not WHAT
-- Each line max 72 chars
-- No preamble, just SUBJECT and BODY
+Output ONLY in this exact format with no other text:
+SUBJECT: <imperative mood, max 72 chars>
+BODY: <optional details>
 
 Diff:
 {diff}`
