@@ -107,28 +107,40 @@ func (cmd *claudeReviewCmd) runOverall(
 ) error {
 	log.Infof("Reviewing changes: %s...%s", fromRef, toRef)
 
+	// Get the diff text.
 	diffText, err := repo.DiffText(ctx, fromRef, toRef)
 	if err != nil {
 		return fmt.Errorf("get diff: %w", err)
 	}
+
 	if diffText == "" {
 		log.Info("No changes to review")
 		return nil
 	}
 
-	result, err := claude.ParseAndFilterDiff(diffText, cfg)
+	// Parse and filter the diff.
+	files, err := claude.ParseDiff(diffText)
 	if err != nil {
 		return fmt.Errorf("parse diff: %w", err)
 	}
-	if len(result.Files) == 0 {
+
+	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
+	if len(filtered) == 0 {
 		log.Info("No changes to review after filtering")
 		return nil
 	}
-	if result.Budget.OverBudget {
-		return cmd.handleOverBudget(view, result.Budget)
+
+	// Check budget.
+	budget := claude.CheckBudget(filtered, cfg.MaxLines)
+	if budget.OverBudget {
+		return cmd.handleOverBudget(view, budget)
 	}
 
-	prompt := claude.BuildReviewPrompt(cfg, title, result.FilteredDiff)
+	// Reconstruct filtered diff.
+	filteredDiff := claude.ReconstructDiff(filtered)
+
+	// Build prompt and run.
+	prompt := claude.BuildReviewPrompt(cfg, title, filteredDiff)
 
 	fmt.Fprint(view, "Sending to Claude for review... ")
 	response, err := client.SendPromptWithModel(ctx, prompt, cfg.Models.Review)
@@ -137,13 +149,15 @@ func (cmd *claudeReviewCmd) runOverall(
 		return cmd.handleClaudeError(err)
 	}
 
+	// Display the review.
 	fmt.Fprintln(view, "")
 	fmt.Fprintln(view, "=== Claude Review ===")
 	fmt.Fprintln(view, "")
 	fmt.Fprintln(view, response)
 
+	// Offer to apply fixes if requested.
 	if cmd.Fix && ui.Interactive(view) {
-		return cmd.offerFixes(ctx, view, client, cfg, response, result.FilteredDiff)
+		return cmd.offerFixes(ctx, view, client, cfg, response, filteredDiff)
 	}
 
 	return nil
@@ -227,33 +241,40 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 	if base == "" {
 		base = store.Trunk()
 	}
+
 	log.Infof("Reviewing branch: %s (base: %s)", branch, base)
 
 	diffText, err := repo.DiffText(ctx, base, branch)
 	if err != nil {
-		return branchReviewResult{}, fmt.Errorf("get diff for %s: %w", branch, err)
+		return branchReviewResult{}, fmt.Errorf("get diff for branch %s: %w", branch, err)
 	}
+
 	if diffText == "" {
 		log.Infof("Branch %s has no changes", branch)
 		return branchReviewResult{Reviewed: false}, nil
 	}
 
-	result, err := claude.ParseAndFilterDiff(diffText, cfg)
+	files, err := claude.ParseDiff(diffText)
 	if err != nil {
-		return branchReviewResult{}, fmt.Errorf("parse diff for %s: %w", branch, err)
+		return branchReviewResult{}, fmt.Errorf("parse diff for branch %s: %w", branch, err)
 	}
-	if len(result.Files) == 0 {
+
+	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
+	if len(filtered) == 0 {
 		log.Infof("Branch %s has no changes after filtering", branch)
 		return branchReviewResult{Reviewed: false}, nil
 	}
-	if result.Budget.OverBudget {
+
+	budget := claude.CheckBudget(filtered, cfg.MaxLines)
+	if budget.OverBudget {
 		return branchReviewResult{}, fmt.Errorf(
 			"branch %s exceeds budget (%d lines > %d max)",
-			branch, result.Budget.TotalLines, result.Budget.MaxLines,
+			branch, budget.TotalLines, budget.MaxLines,
 		)
 	}
 
-	prompt := claude.BuildReviewPrompt(cfg, branch, result.FilteredDiff)
+	filteredDiff := claude.ReconstructDiff(filtered)
+	prompt := claude.BuildReviewPrompt(cfg, branch, filteredDiff)
 
 	fmt.Fprint(view, "Reviewing... ")
 	response, err := client.SendPromptWithModel(ctx, prompt, cfg.Models.Review)

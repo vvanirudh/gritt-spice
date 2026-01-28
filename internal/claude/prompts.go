@@ -281,11 +281,12 @@ func FormatCommitMessage(subject, body string) string {
 	subject = strings.TrimSpace(subject)
 	body = strings.TrimSpace(body)
 
-	// Handle empty subject by using first line of body.
+	// Handle empty subject.
 	if subject == "" {
 		if body == "" {
 			return ""
 		}
+		// Use first line of body as subject if subject is empty.
 		lines := strings.SplitN(body, "\n", 2)
 		subject = strings.TrimSpace(lines[0])
 		if len(lines) > 1 {
@@ -295,36 +296,31 @@ func FormatCommitMessage(subject, body string) string {
 		}
 	}
 
-	subject = truncateSubject(subject, commitLineWidth)
+	// Truncate subject if too long, working with runes for UTF-8 safety.
+	runes := []rune(subject)
+	if len(runes) > commitLineWidth {
+		// Find last space before limit to avoid cutting words.
+		cutoff := commitLineWidth
+		for i := commitLineWidth - 1; i > 0; i-- {
+			if unicode.IsSpace(runes[i]) {
+				cutoff = i
+				break
+			}
+		}
+		subject = strings.TrimSpace(string(runes[:cutoff]))
+		// Enforce hard limit even after TrimSpace.
+		runes = []rune(subject)
+		if len(runes) > commitLineWidth {
+			subject = string(runes[:commitLineWidth])
+		}
+	}
 
 	if body == "" {
 		return subject
 	}
-	return subject + "\n\n" + WrapText(body, commitLineWidth)
-}
 
-// truncateSubject truncates a commit subject to maxLen runes.
-// Prefers breaking at word boundaries when possible.
-func truncateSubject(subject string, maxLen int) string {
-	runes := []rune(subject)
-	if len(runes) <= maxLen {
-		return subject
-	}
+	// Wrap the body text.
+	wrappedBody := WrapText(body, commitLineWidth)
 
-	// Find last space before limit to avoid cutting words.
-	cutoff := maxLen
-	for i := maxLen - 1; i > 0; i-- {
-		if unicode.IsSpace(runes[i]) {
-			cutoff = i
-			break
-		}
-	}
-
-	result := strings.TrimSpace(string(runes[:cutoff]))
-
-	// Enforce hard limit even after TrimSpace.
-	if runes := []rune(result); len(runes) > maxLen {
-		result = string(runes[:maxLen])
-	}
-	return result
+	return subject + "\n\n" + wrappedBody
 }
