@@ -141,9 +141,8 @@ func (cmd *claudeReviewCmd) runOverall(
 	// Build prompt and run.
 	prompt := claude.BuildReviewPrompt(cfg, title, filteredDiff)
 
-	fmt.Fprint(view, "Sending to Claude for review... ")
+	log.Info("Sending to Claude for review...")
 	response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
-	fmt.Fprintln(view, "done")
 	if err != nil {
 		return cmd.handleClaudeError(err)
 	}
@@ -156,7 +155,7 @@ func (cmd *claudeReviewCmd) runOverall(
 
 	// Offer to apply fixes if requested.
 	if cmd.Fix && ui.Interactive(view) {
-		return cmd.offerFixes(ctx, view, client, cfg, response, filteredDiff)
+		return cmd.offerFixes(ctx, log, view, client, cfg, response, filteredDiff)
 	}
 
 	return nil
@@ -236,9 +235,7 @@ func (cmd *claudeReviewCmd) runPerBranch(
 		filteredDiff := claude.ReconstructDiff(filtered)
 		prompt := claude.BuildReviewPrompt(cfg, branch, filteredDiff)
 
-		fmt.Fprint(view, "Reviewing... ")
 		response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
-		fmt.Fprintln(view, "done")
 		if err != nil {
 			return cmd.handleClaudeError(err)
 		}
@@ -253,12 +250,12 @@ func (cmd *claudeReviewCmd) runPerBranch(
 
 	// Overall summary.
 	if len(reviews) > 1 {
-		fmt.Fprint(view, "Generating stack summary... ")
+		log.Info("Generating overall stack summary...")
+
 		stackSummary := strings.Join(reviews, "\n\n---\n\n")
 		prompt := claude.BuildStackReviewPrompt(cfg, stackSummary)
 
 		response, err := client.RunWithModel(ctx, prompt, cfg.Models.Review)
-		fmt.Fprintln(view, "done")
 		if err != nil {
 			return cmd.handleClaudeError(err)
 		}
@@ -292,9 +289,8 @@ func (cmd *claudeReviewCmd) handleOverBudget(view ui.View, budget claude.BudgetR
 		return cmp.Compare(b.lines, a.lines) // descending
 	})
 
-	// Show top N largest files.
-	const maxFilesToShow = 5
-	for i := range min(len(entries), maxFilesToShow) {
+	// Show top 5 largest files.
+	for i := range min(len(entries), 5) {
 		fmt.Fprintf(view, "     - %s (%d lines)\n", entries[i].path, entries[i].lines)
 	}
 
@@ -317,6 +313,7 @@ func (cmd *claudeReviewCmd) handleClaudeError(err error) error {
 
 func (cmd *claudeReviewCmd) offerFixes(
 	ctx context.Context,
+	log *silog.Logger,
 	view ui.View,
 	client *claude.Client,
 	cfg *claude.Config,
@@ -358,9 +355,8 @@ Do not add any new functionality beyond what the review suggests.
 ## Current diff:
 ` + diff
 
-	fmt.Fprint(view, "Applying fixes with Claude... ")
+	log.Info("Applying fixes with Claude...")
 	response, err := client.RunWithModel(ctx, fixPrompt, cfg.Models.Review)
-	fmt.Fprintln(view, "done")
 	if err != nil {
 		return cmd.handleClaudeError(err)
 	}
