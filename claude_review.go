@@ -208,8 +208,7 @@ func (cmd *claudeReviewCmd) runPerBranch(
 }
 
 // reviewSingleBranch reviews a single branch and returns the review text.
-// Returns empty string if the branch has no reviewable changes.
-// Returns an error if the branch exceeds the budget.
+// Returns empty string if the branch should be skipped.
 func (cmd *claudeReviewCmd) reviewSingleBranch(
 	ctx context.Context,
 	log *silog.Logger,
@@ -223,7 +222,6 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 ) (string, error) {
 	info, ok := graph.Lookup(branch)
 	if !ok {
-		log.Warn("Branch not found in graph, skipping", "branch", branch)
 		return "", nil
 	}
 
@@ -236,7 +234,8 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 
 	diffText, err := repo.DiffText(ctx, base, branch)
 	if err != nil {
-		return "", fmt.Errorf("get diff for branch %s: %w", branch, err)
+		log.Warn("Could not get diff for branch", "branch", branch, "error", err)
+		return "", nil
 	}
 
 	if diffText == "" {
@@ -246,7 +245,8 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 
 	files, err := claude.ParseDiff(diffText)
 	if err != nil {
-		return "", fmt.Errorf("parse diff for branch %s: %w", branch, err)
+		log.Warn("Could not parse diff for branch", "branch", branch, "error", err)
+		return "", nil
 	}
 
 	filtered := claude.FilterDiff(files, cfg.IgnorePatterns)
@@ -257,10 +257,9 @@ func (cmd *claudeReviewCmd) reviewSingleBranch(
 
 	budget := claude.CheckBudget(filtered, cfg.MaxLines)
 	if budget.OverBudget {
-		return "", fmt.Errorf(
-			"branch %s exceeds budget (%d lines > %d max)",
-			branch, budget.TotalLines, budget.MaxLines,
-		)
+		log.Warnf("Branch %s exceeds budget (%d lines > %d max)",
+			branch, budget.TotalLines, budget.MaxLines)
+		return "", nil
 	}
 
 	filteredDiff := claude.ReconstructDiff(filtered)

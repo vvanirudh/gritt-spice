@@ -895,15 +895,6 @@ func (h *Handler) submitBranch(
 			}
 		}
 
-		// Check for title/body updates.
-		if opts.Title != "" && opts.Title != pull.Subject {
-			updates = append(updates, "update title")
-		}
-		if opts.Body != "" {
-			// Always update body if provided (we can't compare with existing).
-			updates = append(updates, "update body")
-		}
-
 		if len(updates) == 0 {
 			log.Infof("CR %v is up-to-date: %s", pull.ID, pull.URL)
 			return status, nil
@@ -942,9 +933,7 @@ func (h *Handler) submitBranch(
 		}
 
 		if len(updates) > 0 {
-			editOpts := forge.EditChangeOptions{
-				Title:        opts.Title,
-				Body:         opts.Body,
+			opts := forge.EditChangeOptions{
 				Base:         upstreamBase,
 				Draft:        opts.Draft,
 				AddLabels:    opts.Labels,
@@ -958,7 +947,7 @@ func (h *Handler) submitBranch(
 				return status, fmt.Errorf("edit CR %v: %w", pull.ID, err)
 			}
 
-			if err := remoteRepo.EditChange(ctx, pull.ID, editOpts); err != nil {
+			if err := remoteRepo.EditChange(ctx, pull.ID, opts); err != nil {
 				return status, fmt.Errorf("edit CR %v: %w", pull.ID, err)
 			}
 		}
