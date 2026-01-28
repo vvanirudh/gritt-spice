@@ -68,11 +68,10 @@ func ParseDiff(diff string) ([]DiffFile, error) {
 			// Extract path from diff header.
 			// matches[1] and matches[2] are for quoted paths.
 			// matches[3] and matches[4] are for unquoted paths.
-			// Regex has 5 capture groups (0=full match, 1-4=groups).
 			var destPath string
-			if len(matches) > 2 && matches[2] != "" {
+			if matches[2] != "" {
 				destPath = matches[2]
-			} else if len(matches) > 4 && matches[4] != "" {
+			} else if matches[4] != "" {
 				destPath = matches[4]
 			}
 
@@ -202,16 +201,11 @@ func countLines(s string) int {
 
 // ReconstructDiff reconstructs a diff from filtered file sections.
 func ReconstructDiff(files []DiffFile) string {
-	if len(files) == 0 {
-		return ""
-	}
-
-	// Pre-allocate exact capacity: sum of content lengths + (n-1) separators.
+	// Pre-allocate capacity to avoid reallocation.
 	totalLen := 0
 	for _, f := range files {
-		totalLen += len(f.Content)
+		totalLen += len(f.Content) + 1
 	}
-	totalLen += len(files) - 1 // newline separators between files
 
 	var builder strings.Builder
 	builder.Grow(totalLen)

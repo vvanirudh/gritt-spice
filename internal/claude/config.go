@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -213,28 +212,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Prompts.Commit == "" {
 		return errors.New("prompts.commit must be set")
-	}
-
-	// Validate required placeholders in prompts.
-	if err := validatePlaceholders(c.Prompts.Review, "prompts.review", "{diff}"); err != nil {
-		return err
-	}
-	if err := validatePlaceholders(c.Prompts.Summary, "prompts.summary", "{diff}"); err != nil {
-		return err
-	}
-	if err := validatePlaceholders(c.Prompts.Commit, "prompts.commit", "{diff}"); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validatePlaceholders checks that a prompt contains all required placeholders.
-func validatePlaceholders(prompt, name string, required ...string) error {
-	for _, p := range required {
-		if !strings.Contains(prompt, p) {
-			return fmt.Errorf("%s must contain %s placeholder", name, p)
-		}
 	}
 	return nil
 }
