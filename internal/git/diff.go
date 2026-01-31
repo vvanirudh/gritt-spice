@@ -101,7 +101,7 @@ func (w *Worktree) DiffIndex(ctx context.Context, treeish string) ([]FileStatus,
 // The treeish1 and treeish2 arguments can be any valid tree-ish references.
 func (r *Repository) DiffTree(ctx context.Context, treeish1, treeish2 string) iter.Seq2[FileStatus, error] {
 	return func(yield func(FileStatus, error) bool) {
-		cmd := r.gitCmd(ctx, "diff-tree", "--name-status", "-z", treeish1, treeish2)
+		cmd := r.gitCmd(ctx, "diff-tree", "-r", "--name-status", "-z", treeish1, treeish2)
 		var status string
 		var expectingPath bool
 		for line, err := range cmd.Scan(scanutil.SplitNull) {
@@ -129,6 +129,37 @@ func (r *Repository) DiffTree(ctx context.Context, treeish1, treeish2 string) it
 			}
 		}
 	}
+}
+
+// DiffText returns the unified diff text between two refs.
+// It uses the triple-dot syntax (base...head) to compare
+// the merge-base of base and head with head.
+func (r *Repository) DiffText(ctx context.Context, base, head string) (string, error) {
+	out, err := r.gitCmd(ctx, "diff", base+"..."+head).Output()
+	if err != nil {
+		return "", fmt.Errorf("git diff %s...%s: %w", base, head, err)
+	}
+	return string(out), nil
+}
+
+// DiffTextDirect returns the unified diff text between two refs.
+// Unlike DiffText, it uses a direct two-dot comparison (base..head)
+// rather than the merge-base.
+func (r *Repository) DiffTextDirect(ctx context.Context, base, head string) (string, error) {
+	out, err := r.gitCmd(ctx, "diff", base, head).Output()
+	if err != nil {
+		return "", fmt.Errorf("git diff %s %s: %w", base, head, err)
+	}
+	return string(out), nil
+}
+
+// DiffStaged returns the unified diff text of staged changes.
+func (w *Worktree) DiffStaged(ctx context.Context) (string, error) {
+	out, err := w.gitCmd(ctx, "diff", "--cached").Output()
+	if err != nil {
+		return "", fmt.Errorf("git diff --cached: %w", err)
+	}
+	return string(out), nil
 }
 
 func parseDiffFileStatuses(r io.Reader, log *silog.Logger) ([]FileStatus, error) {
