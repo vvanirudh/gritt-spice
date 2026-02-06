@@ -1,4 +1,4 @@
-// gs (git-spice) is a command line tool for stacking Git branches.
+// gs (gritt-spice) is a command line tool for stacking Git branches.
 package main
 
 import (
@@ -39,7 +39,7 @@ import (
 	"go.abhg.dev/komplete"
 )
 
-// Version of git-spice.
+// Version of gritt-spice.
 // Set by goreleaser at build time.
 var _version = "dev"
 
@@ -130,7 +130,7 @@ func main() {
 	cmdName := filepath.Base(os.Args[0])
 	parser, err := kong.New(&cmd,
 		kong.Name(cmdName),
-		kong.Description("gs (git-spice) is a command line tool for stacking Git branches."),
+		kong.Description("gs (gritt-spice) is a command line tool for stacking Git branches."),
 		kong.Resolvers(spiceConfig),
 		kong.Bind(logger, &forges),
 		kong.BindTo(ctx, (*context.Context)(nil)),

@@ -26,7 +26,7 @@ func TestVersionFlag(t *testing.T) {
 		},
 	})
 	assert.Zero(t, exitCode)
-	assert.Contains(t, stdout.String(), "git-spice "+_version)
+	assert.Contains(t, stdout.String(), "gritt-spice "+_version)
 	assert.Contains(t, stdout.String(), "(commithash timestamp)")
 }
 
@@ -40,7 +40,7 @@ func TestVersionCmd(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.Contains(t, stdout.String(), "git-spice v1.2.3")
+		assert.Contains(t, stdout.String(), "gritt-spice v1.2.3")
 	})
 
 	t.Run("Short", func(t *testing.T) {
