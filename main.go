@@ -1,4 +1,4 @@
-// gs (git-spice) is a command line tool for stacking Git branches.
+// gs (gritt-spice) is a command line tool for stacking Git branches.
 package main
 
 import (
@@ -39,7 +39,7 @@ import (
 	"go.abhg.dev/komplete"
 )
 
-// Version of git-spice.
+// Version of gritt-spice.
 // Set by goreleaser at build time.
 var _version = "dev"
 
@@ -130,7 +130,7 @@ func main() {
 	cmdName := filepath.Base(os.Args[0])
 	parser, err := kong.New(&cmd,
 		kong.Name(cmdName),
-		kong.Description("gs (git-spice) is a command line tool for stacking Git branches."),
+		kong.Description("gs (gritt-spice) is a command line tool for stacking Git branches."),
 		kong.Resolvers(spiceConfig),
 		kong.Bind(logger, &forges),
 		kong.BindTo(ctx, (*context.Context)(nil)),
@@ -245,10 +245,11 @@ type mainCmd struct {
 	// Global options that are never accessed directly by subcommands.
 	Globals struct {
 		// Flags with built-in side effects.
-		Version versionFlag        `help:"Print version information and quit"`
-		Verbose bool               `short:"v" help:"Enable verbose output" env:"GIT_SPICE_VERBOSE"`
-		Dir     kong.ChangeDirFlag `short:"C" placeholder:"DIR" help:"Change to DIR before doing anything" predictor:"dirs"`
-		Prompt  bool               `name:"prompt" negatable:"" default:"${defaultPrompt}" help:"Whether to prompt for missing information"`
+		Version       versionFlag        `help:"Print version information and quit"`
+		Verbose       bool               `short:"v" help:"Enable verbose output" env:"GIT_SPICE_VERBOSE"`
+		Dir           kong.ChangeDirFlag `short:"C" placeholder:"DIR" help:"Change to DIR before doing anything" predictor:"dirs"`
+		Prompt        bool               `name:"prompt" negatable:"" default:"${defaultPrompt}" help:"Whether to prompt for missing information"`
+		RestackMethod string             `config:"restack.method" default:"rebase" enum:"rebase,merge" help:"Method to use for restacking (rebase or merge)"`
 	} `embed:"" group:"globals"`
 
 	Shell shellCmd `cmd:"" group:"Shell"`
@@ -264,7 +265,11 @@ type mainCmd struct {
 	Branch branchCmd `cmd:"" aliases:"b" group:"Branch"`
 	Commit commitCmd `cmd:"" aliases:"c" group:"Commit"`
 
-	Rebase rebaseCmd `cmd:"" aliases:"rb" group:"Rebase"`
+	Rebase   rebaseCmd   `cmd:"" aliases:"rb" group:"Rebase"`
+	Continue continueCmd `cmd:"" help:"Continue an interrupted operation"`
+	Abort    abortCmd    `cmd:"" help:"Abort an interrupted operation"`
+
+	Claude claudeCmd `cmd:"" group:"AI" help:"Claude AI integration commands"`
 
 	Claude claudeCmd `cmd:"" group:"AI" help:"Claude AI integration commands"`
 
@@ -318,7 +323,18 @@ func (cmd *mainCmd) AfterApply(ctx context.Context, kctx *kong.Context, logger *
 			store *state.Store,
 			forges *forge.Registry,
 		) (*spice.Service, error) {
-			return spice.NewService(repo, wt, store, forges, logger), nil
+			// Parse the restack method from configuration
+			var restackMethod spice.RestackMethod
+			switch cmd.Globals.RestackMethod {
+			case "rebase":
+				restackMethod = spice.RestackMethodRebase
+			case "merge":
+				restackMethod = spice.RestackMethodMerge
+			default:
+				return nil, fmt.Errorf("invalid restack method: %q (must be 'rebase' or 'merge')", cmd.Globals.RestackMethod)
+			}
+
+			return spice.NewServiceWithRestackMethod(repo, wt, store, forges, logger, restackMethod), nil
 		}),
 		kctx.BindSingletonProvider(func(
 			log *silog.Logger,

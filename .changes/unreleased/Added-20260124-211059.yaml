@@ -1,0 +1,3 @@
+kind: Added
+body: Add support for merge-based restacking via spice.restack.method configuration
+time: 2026-01-24T21:10:59.990093-08:00

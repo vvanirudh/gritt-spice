@@ -9,6 +9,19 @@ import (
 	"go.abhg.dev/gs/internal/spice/state"
 )
 
+// RestackMethod specifies the method used for restacking branches.
+type RestackMethod int
+
+const (
+	// RestackMethodRebase uses git rebase to restack branches.
+	// This is the default method.
+	RestackMethodRebase RestackMethod = iota
+
+	// RestackMethodMerge uses git merge to restack branches.
+	// This preserves history by creating merge commits.
+	RestackMethodMerge
+)
+
 // ErrAlreadyRestacked indicates that a branch is already restacked
 // on top of its base.
 var ErrAlreadyRestacked = errors.New("branch is already restacked")
@@ -83,14 +96,26 @@ func (s *Service) Restack(ctx context.Context, name string) (*RestackResponse, e
 		}
 	}
 
-	if err := s.wt.Rebase(ctx, git.RebaseRequest{
-		Onto:      baseHash.String(),
-		Upstream:  upstream.String(),
-		Branch:    name,
-		Autostash: true,
-		Quiet:     true,
-	}); err != nil {
-		return nil, fmt.Errorf("rebase: %w", err)
+	// Restack using the configured method
+	switch s.restackMethod {
+	case RestackMethodRebase:
+		if err := s.wt.Rebase(ctx, git.RebaseRequest{
+			Onto:      baseHash.String(),
+			Upstream:  upstream.String(),
+			Branch:    name,
+			Autostash: true,
+			Quiet:     true,
+		}); err != nil {
+			return nil, fmt.Errorf("rebase: %w", err)
+		}
+
+	case RestackMethodMerge:
+		if err := s.restackWithMerge(ctx, name, b.Base, baseHash, upstream); err != nil {
+			return nil, fmt.Errorf("merge: %w", err)
+		}
+
+	default:
+		return nil, fmt.Errorf("unknown restack method: %v", s.restackMethod)
 	}
 
 	tx := s.store.BeginBranchTx()
@@ -187,4 +212,38 @@ func (s *Service) CheckRestacked(ctx context.Context, name string) (baseHash git
 	}
 
 	return baseHash, nil
+}
+
+// restackWithMerge restacks a branch using the merge method.
+// It merges the new base into the branch, creating a merge commit.
+func (s *Service) restackWithMerge(ctx context.Context, name string, baseName string, baseHash git.Hash, upstream git.Hash) error {
+	// Ensure we're on the branch to restack
+	currentBranch, err := s.wt.CurrentBranch(ctx)
+	if err != nil {
+		return fmt.Errorf("get current branch: %w", err)
+	}
+	if currentBranch != name {
+		if err := s.wt.CheckoutBranch(ctx, name); err != nil {
+			return fmt.Errorf("checkout %v: %w", name, err)
+		}
+	}
+
+	// If the base is already an ancestor of HEAD, we're done (fast-forward case)
+	if s.repo.IsAncestor(ctx, baseHash, upstream) {
+		s.log.Debug("Base is already ancestor, no merge needed", "branch", name)
+		return nil
+	}
+
+	// Merge the base into the current branch
+	// Use a custom merge message with the base branch name
+	if err := s.wt.Merge(ctx, git.MergeRequest{
+		Commit:  baseHash.String(),
+		NoFF:    false, // allow fast-forward if possible
+		Quiet:   true,
+		Message: "Restack: merge " + baseName + " into " + name,
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }

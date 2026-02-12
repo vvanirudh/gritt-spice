@@ -1,0 +1,174 @@
+# Complex 3-branch stack with conflicts at multiple levels
+
+as 'Test <test@example.com>'
+at '2024-05-27T18:24:42Z'
+
+mkdir repo
+cd repo
+git init
+git add init.txt
+git commit -m 'Initial commit'
+gs repo init
+
+# Configure merge-based restacking
+git config spice.restack.method merge
+
+# Create a 3-branch stack
+# feat1: modifies file1.txt
+cp $WORK/extra/file1.feat1.txt file1.txt
+git add file1.txt
+gs bc feat1 -m 'feat1: add file1'
+
+# feat2: modifies file2.txt and file1.txt
+cp $WORK/extra/file1.feat2.txt file1.txt
+cp $WORK/extra/file2.feat2.txt file2.txt
+git add file1.txt file2.txt
+gs bc feat2 -m 'feat2: modify file1 and add file2'
+
+# feat3: modifies file3.txt and file2.txt
+cp $WORK/extra/file2.feat3.txt file2.txt
+cp $WORK/extra/file3.feat3.txt file3.txt
+git add file2.txt file3.txt
+gs bc feat3 -m 'feat3: modify file2 and add file3'
+
+# Verify stack structure
+gs log short
+stderr 'feat3'
+stderr 'feat2'
+stderr 'feat1'
+
+# Go back to main and make conflicting changes
+gs trunk
+cp $WORK/extra/file1.main.txt file1.txt
+git add file1.txt
+git commit -m 'main: modify file1'
+
+# Also modify the middle of the stack (feat2) directly
+gs branch checkout feat2
+cp $WORK/extra/file2.conflict.txt file2.txt
+git add file2.txt
+git commit -m 'feat2: direct change to file2'
+
+# Go back to feat1 to start restacking
+gs branch checkout feat1
+
+# Test 1: Restack single branch (feat1) - should conflict with main
+! gs branch restack
+stderr 'There was a conflict while merging'
+stderr 'gs continue'
+
+# Resolve conflict on feat1
+cp $WORK/extra/file1.resolved1.txt file1.txt
+git add file1.txt
+env EDITOR=true
+gs continue
+stderr 'feat1: branch does not need to be restacked'
+
+# Verify feat1 has merge commit
+git log --oneline --graph feat1
+stdout 'Restack: merge main into feat1'
+
+# Test 2: Restack entire stack - should handle conflicts at multiple levels
+gs branch checkout feat1
+! gs upstack restack
+stderr 'There was a conflict while merging'
+
+# First conflict: feat2 needs to merge changes from feat1
+# feat2 has changes to file1.txt that conflict with feat1's resolved version
+cp $WORK/extra/file1.resolved2.txt file1.txt
+git add file1.txt
+env EDITOR=true
+! gs continue
+stderr 'There was a conflict while merging'
+
+# Second conflict: feat3 needs to merge changes from feat2
+# feat3 has changes to file2.txt that conflict with feat2's direct change
+cp $WORK/extra/file2.resolved3.txt file2.txt
+git add file2.txt
+env EDITOR=true
+gs continue
+stderr 'feat3: branch does not need to be restacked'
+
+# Verify all branches have merge commits
+gs branch checkout feat1
+git log --oneline --graph --all
+stdout 'Restack: merge main into feat1'
+stdout 'Restack: merge feat1 into feat2'
+stdout 'Restack: merge feat2 into feat3'
+
+# Test 3: Stack restack from feat3 (test downstack direction)
+# Make another change on main
+gs trunk
+cp $WORK/extra/file1.main2.txt file1.txt
+git add file1.txt
+git commit -m 'main: another change to file1'
+
+# Stack restack from feat3 should restack all three branches
+gs branch checkout feat3
+! gs stack restack
+stderr 'There was a conflict while merging'
+
+# Resolve conflicts on feat1
+cp $WORK/extra/file1.resolved4.txt file1.txt
+git add file1.txt
+env EDITOR=true
+! gs continue
+stderr 'There was a conflict while merging'
+
+# Resolve conflicts on feat2
+cp $WORK/extra/file1.resolved5.txt file1.txt
+git add file1.txt
+env EDITOR=true
+gs continue
+stderr 'feat3: restacked on feat2'
+
+# Verify final state: all branches should be properly stacked
+gs log short
+stderr 'feat3'
+stderr 'feat2'
+stderr 'feat1'
+
+-- repo/init.txt --
+initial
+
+-- extra/file1.feat1.txt --
+feat1 content
+
+-- extra/file1.feat2.txt --
+feat2 content
+
+-- extra/file2.feat2.txt --
+feat2 file2
+
+-- extra/file2.feat3.txt --
+feat3 file2
+
+-- extra/file3.feat3.txt --
+feat3 file3
+
+-- extra/file1.main.txt --
+main content
+
+-- extra/file2.conflict.txt --
+direct change to feat2
+
+-- extra/file1.resolved1.txt --
+resolved1
+
+-- extra/file1.resolved2.txt --
+resolved2
+
+-- extra/file2.resolved3.txt --
+resolved3
+
+-- extra/file1.main2.txt --
+main content 2
+
+-- extra/file1.resolved4.txt --
+resolved4
+
+-- extra/file1.resolved5.txt --
+resolved5
+
+-- extra/file2.resolved6.txt --
+resolved6

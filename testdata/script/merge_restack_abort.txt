@@ -1,0 +1,55 @@
+# Abort during merge restack with 'gs abort'
+
+as 'Test <test@example.com>'
+at '2024-05-27T18:24:42Z'
+
+mkdir repo
+cd repo
+git init
+git add init.txt
+git commit -m 'Initial commit'
+gs repo init
+
+# Configure merge-based restacking
+git config spice.restack.method merge
+
+# Create a feature branch
+cp $WORK/extra/init.feature.txt init.txt
+git add init.txt
+gs bc -m feature
+
+# Go back to main and make conflicting change
+gs trunk
+cp $WORK/extra/init.new.txt init.txt
+git add init.txt
+git commit -m 'Change init'
+
+# Restack the feature branch - should hit conflict
+gs branch checkout feature
+! gs branch restack
+stderr 'There was a conflict while merging'
+stderr 'gs abort'
+
+# Abort the merge
+gs abort
+
+# Verify we're back to the original state (before merge)
+cmp init.txt $WORK/extra/init.feature.txt
+
+# Verify no merge commit was created
+git log --oneline feature
+! stdout 'Restack'
+
+# Verify branch still needs restacking
+gs branch checkout main
+gs branch checkout feature
+stderr 'feature: needs to be restacked'
+
+-- repo/init.txt --
+initial init
+
+-- extra/init.new.txt --
+changed init
+
+-- extra/init.feature.txt --
+feature's init

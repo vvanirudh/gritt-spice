@@ -1,0 +1,47 @@
+# Branch onto uses merge method when configured
+
+as 'Test <test@example.com>'
+at '2024-05-27T18:24:42Z'
+
+mkdir repo
+cd repo
+git init
+git add init.txt
+git commit -m 'Initial commit'
+gs repo init
+
+# Configure merge-based restacking
+git config spice.restack.method merge
+
+# Create two base branches
+git add feat1.txt
+gs bc feat1 -m feat1
+gs trunk
+git add feat2.txt
+gs bc feat2 -m feat2
+
+# Create a branch on top of feat1
+gs branch checkout feat1
+git add child.txt
+gs bc child -m child
+
+# Move child onto feat2
+gs branch onto feat2
+
+# Verify merge commit was created
+git log --oneline --graph child
+stdout 'Restack: merge feat2 into child'
+
+# Verify child is now on feat2
+gs log short
+stderr 'child'
+stderr 'feat2'
+
+-- repo/init.txt --
+initial
+-- repo/feat1.txt --
+feature 1
+-- repo/feat2.txt --
+feature 2
+-- repo/child.txt --
+child feature

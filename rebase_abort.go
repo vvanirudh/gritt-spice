@@ -25,6 +25,9 @@ func (*rebaseAbortCmd) Help() string {
 
 		The command can be used in place of 'git rebase --abort'
 		even if a git-spice operation is not currently in progress.
+
+		Note: You can also use 'gs abort' which works for both
+		rebase and merge operations.
 	`)
 }
 

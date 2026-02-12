@@ -1,0 +1,33 @@
+# Default configuration still uses rebase (backward compatibility)
+
+as 'Test User <test@example.com>'
+at 2025-06-20T21:28:29Z
+
+cd repo
+git init
+git commit -m 'Initial commit' --allow-empty
+
+gs repo init
+git add feat1.txt
+gs branch create feat1 -m 'feat1 commit'
+
+# Create a new commit on trunk
+gs branch checkout main
+git commit --allow-empty -m 'New trunk commit'
+
+# Restack without configuring merge method (should use rebase)
+gs branch checkout feat1
+gs branch restack
+stderr 'feat1: restacked on main'
+
+# Verify NO merge commit was created (rebase was used)
+git log --oneline --graph feat1
+! stdout 'Merge'
+! stdout 'Restack: merge'
+
+# Verify the commit was rebased (same commit message, different hash)
+git log --oneline feat1
+stdout 'feat1 commit'
+
+-- repo/feat1.txt --
+feature 1

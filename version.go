@@ -29,7 +29,7 @@ func (cmd *versionCmd) Run(app *kong.Kong) error {
 		return nil
 	}
 
-	fmt.Fprint(app.Stdout, "git-spice ", _version)
+	fmt.Fprint(app.Stdout, "gritt-spice ", _version)
 	if report := _generateBuildReport(); report != "" {
 		fmt.Fprintf(app.Stdout, " (%s)", report)
 	}

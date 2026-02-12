@@ -1,0 +1,121 @@
+# Unified gs continue and gs abort work for both rebase and merge
+
+as 'Test <test@example.com>'
+at '2024-05-27T18:24:42Z'
+
+mkdir repo
+cd repo
+git init
+git add init.txt
+git commit -m 'Initial commit'
+gs repo init
+
+# Test 1: gs continue works with rebase (default method)
+cp $WORK/extra/init.feat1.txt init.txt
+git add init.txt
+gs bc feat1 -m feat1
+
+gs trunk
+cp $WORK/extra/init.new.txt init.txt
+git add init.txt
+git commit -m 'Change init'
+
+gs branch checkout feat1
+! gs branch restack
+stderr 'There was a conflict while rebasing'
+stderr 'gs continue'
+
+cp $WORK/extra/init.resolved.txt init.txt
+git add init.txt
+env EDITOR=true
+gs continue
+stderr 'feat1: branch does not need to be restacked'
+
+# Test 2: gs abort works with rebase
+gs trunk
+cp $WORK/extra/init.new2.txt init.txt
+git add init.txt
+git commit -m 'Another change'
+
+gs branch checkout feat1
+! gs branch restack
+stderr 'conflict'
+
+gs abort
+! stderr 'error'
+
+# Verify branch is back to clean state
+git status
+stdout 'nothing to commit'
+
+# Test 3: gs continue works with merge
+git config spice.restack.method merge
+
+gs trunk
+cp $WORK/extra/init.feat2.txt init.txt
+git add init.txt
+gs bc feat2 -m feat2
+
+gs trunk
+cp $WORK/extra/init.new3.txt init.txt
+git add init.txt
+git commit -m 'Yet another change'
+
+gs branch checkout feat2
+! gs branch restack
+stderr 'There was a conflict while merging'
+stderr 'gs continue'
+
+cp $WORK/extra/init.resolved2.txt init.txt
+git add init.txt
+env EDITOR=true
+gs continue
+stderr 'feat2: branch does not need to be restacked'
+
+# Verify merge commit was created
+git log --oneline --graph feat2
+stdout 'Restack: merge main into feat2'
+
+# Test 4: gs abort works with merge
+gs trunk
+cp $WORK/extra/init.new4.txt init.txt
+git add init.txt
+git commit -m 'Final change'
+
+gs branch checkout feat2
+! gs branch restack
+stderr 'conflict'
+
+gs abort
+! stderr 'error'
+
+# Verify branch is back to clean state
+git status
+stdout 'nothing to commit'
+
+-- repo/init.txt --
+initial
+
+-- extra/init.feat1.txt --
+feature 1
+
+-- extra/init.feat2.txt --
+feature 2
+
+-- extra/init.new.txt --
+changed
+
+-- extra/init.new2.txt --
+changed 2
+
+-- extra/init.new3.txt --
+changed 3
+
+-- extra/init.new4.txt --
+changed 4
+
+-- extra/init.resolved.txt --
+resolved 1
+
+-- extra/init.resolved2.txt --
+resolved 2

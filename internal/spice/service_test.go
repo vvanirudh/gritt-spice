@@ -24,7 +24,7 @@ func NewTestService(
 	forgeReg *forge.Registry,
 	log *silog.Logger,
 ) *Service {
-	return newService(repo, wt, store, forgeReg, log)
+	return newService(repo, wt, store, forgeReg, log, RestackMethodRebase)
 }
 
 // NewMemoryStore builds gs state storage
