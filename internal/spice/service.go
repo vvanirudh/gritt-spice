@@ -113,7 +113,7 @@ func NewService(
 	forges *forge.Registry,
 	log *silog.Logger,
 ) *Service {
-	return newService(repo, wt, store, forges, log, RestackMethodRebase)
+	return newService(repo, wt, store, forges, log, RestackMethodMerge)
 }
 
 // NewServiceWithRestackMethod builds a new service with a specified restack method.

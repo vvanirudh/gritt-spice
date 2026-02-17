@@ -249,7 +249,7 @@ type mainCmd struct {
 		Verbose       bool               `short:"v" help:"Enable verbose output" env:"GIT_SPICE_VERBOSE"`
 		Dir           kong.ChangeDirFlag `short:"C" placeholder:"DIR" help:"Change to DIR before doing anything" predictor:"dirs"`
 		Prompt        bool               `name:"prompt" negatable:"" default:"${defaultPrompt}" help:"Whether to prompt for missing information"`
-		RestackMethod string             `config:"restack.method" default:"rebase" enum:"rebase,merge" help:"Method to use for restacking (rebase or merge)"`
+		RestackMethod string             `config:"restack.method" default:"merge" enum:"rebase,merge" help:"Method to use for restacking (rebase or merge)"`
 	} `embed:"" group:"globals"`
 
 	Shell shellCmd `cmd:"" group:"Shell"`
