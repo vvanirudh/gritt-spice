@@ -8,7 +8,7 @@
 #   ./install.sh
 #
 # Requirements:
-#   - Go 1.21 or later
+#   - curl or wget (used to download Go if not already installed)
 #
 
 set -euo pipefail
@@ -43,10 +43,98 @@ die() {
     exit 1
 }
 
-# Check if Go is installed.
+# Detect OS and CPU architecture for Go tarball selection.
+detect_platform() {
+    local os arch
+
+    case "$(uname -s)" in
+        Linux)  os="linux" ;;
+        Darwin) os="darwin" ;;
+        *)
+            die "Unsupported OS: $(uname -s). Install Go manually: https://go.dev/dl"
+            ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64)        arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *)
+            die "Unsupported architecture: $(uname -m). Install Go manually: https://go.dev/dl"
+            ;;
+    esac
+
+    echo "${os}-${arch}"
+}
+
+# Fetch the latest stable Go version string (e.g., "go1.24.0").
+# Falls back to go1.21.0 if the fetch fails.
+get_latest_go_version() {
+    local version
+    if command -v curl &> /dev/null; then
+        version=$(curl -fsSL "https://go.dev/VERSION?m=text" 2>/dev/null \
+            | head -1 | tr -d '[:space:]')
+    elif command -v wget &> /dev/null; then
+        version=$(wget -qO- "https://go.dev/VERSION?m=text" 2>/dev/null \
+            | head -1 | tr -d '[:space:]')
+    fi
+    echo "${version:-go1.21.0}"
+}
+
+# Install Go to /usr/local/go from the official download site.
+install_go() {
+    local version platform
+    version=$(get_latest_go_version)
+    platform=$(detect_platform)
+
+    info "Installing $version for ${platform}..."
+
+    # Determine whether sudo is needed to write to /usr/local.
+    local use_sudo=""
+    if [ ! -w "/usr/local" ]; then
+        if ! command -v sudo &> /dev/null; then
+            die "Cannot write to /usr/local and sudo is unavailable. Install Go manually: https://go.dev/dl"
+        fi
+        use_sudo="sudo"
+        warn "Installing Go to /usr/local/go requires sudo."
+    fi
+
+    # Download the tarball to a temporary directory.
+    local tmp_dir tarball
+    tmp_dir=$(mktemp -d)
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp_dir'" EXIT
+    tarball="$tmp_dir/go.tar.gz"
+
+    local tarball_url="https://go.dev/dl/${version}.${platform}.tar.gz"
+    info "Downloading $tarball_url..."
+
+    if command -v curl &> /dev/null; then
+        curl -fsSL -o "$tarball" "$tarball_url"
+    elif command -v wget &> /dev/null; then
+        wget -qO "$tarball" "$tarball_url"
+    else
+        die "Neither curl nor wget is available. Install Go manually: https://go.dev/dl"
+    fi
+
+    # Remove any existing Go installation before extracting.
+    if [ -d "/usr/local/go" ]; then
+        info "Removing existing Go installation at /usr/local/go..."
+        $use_sudo rm -rf "/usr/local/go"
+    fi
+
+    $use_sudo tar -C /usr/local -xzf "$tarball"
+
+    # Make Go available in the current shell session.
+    export PATH="/usr/local/go/bin:$PATH"
+
+    info "Go installed at /usr/local/go."
+}
+
+# Check if Go is installed; install it automatically if not.
 check_go() {
     if ! command -v go &> /dev/null; then
-        die "Go is not installed. Please install Go 1.21 or later from https://go.dev/dl"
+        warn "Go is not installed."
+        install_go
     fi
 
     # Verify Go version is at least 1.21.
@@ -92,7 +180,8 @@ get_user_shell() {
     local real_user shell_path
 
     # Determine the real user (handles sudo).
-    real_user="${SUDO_USER:-$USER}"
+    # Fall back to id -un when USER is unset (e.g., in Docker containers).
+    real_user="${SUDO_USER:-${USER:-$(id -un)}}"
 
     # Try to get login shell from passwd database.
     # Works on Linux (getent) and macOS (dscl).
@@ -115,7 +204,8 @@ get_shell_rc() {
     shell_name=$(basename "$shell_path")
 
     # Determine the real user's home directory (handles sudo).
-    real_user="${SUDO_USER:-$USER}"
+    # Fall back to id -un when USER is unset (e.g., in Docker containers).
+    real_user="${SUDO_USER:-${USER:-$(id -un)}}"
     if [ -n "${SUDO_USER:-}" ]; then
         # Get home directory for the real user, not root.
         if command -v getent &> /dev/null; then
@@ -176,6 +266,34 @@ configure_shell_rc() {
     warn "Run 'source ~/$rc_name' or start a new shell to update your PATH."
 }
 
+# Add /usr/local/go/bin to PATH in the shell rc file if not already present.
+configure_go_rc() {
+    local go_bin="/usr/local/go/bin"
+    local rc_file
+    rc_file=$(get_shell_rc)
+    local rc_name
+    rc_name=$(basename "$rc_file")
+
+    if [ ! -f "$rc_file" ]; then
+        warn "$rc_name not found. Creating it."
+        touch "$rc_file"
+    fi
+
+    if grep -qF "$go_bin" "$rc_file" 2>/dev/null; then
+        info "Go bin ($go_bin) is already configured in $rc_name"
+        return
+    fi
+
+    {
+        echo ""
+        echo "# Added by git-spice install script"
+        echo "export PATH=\"$go_bin:\$PATH\""
+    } >> "$rc_file"
+
+    info "Added Go bin to PATH in $rc_name"
+    warn "Run 'source ~/$rc_name' or start a new shell to update your PATH."
+}
+
 # Check if gs is accessible in PATH.
 verify_installation() {
     local gobin="$1"
@@ -190,7 +308,18 @@ verify_installation() {
 main() {
     info "Starting git-spice installation..."
 
+    # Track whether Go needs to be installed.
+    local go_was_missing=false
+    if ! command -v go &> /dev/null; then
+        go_was_missing=true
+    fi
+
     check_go
+
+    # Configure the shell rc to include the Go toolchain if just installed.
+    if [ "$go_was_missing" = "true" ]; then
+        configure_go_rc
+    fi
 
     local gobin
     gobin=$(get_gobin)
