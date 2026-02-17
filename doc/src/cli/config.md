@@ -292,39 +292,39 @@ $$gs repo restack$$, and $$gs branch onto$$.
 
 **Accepted values:**
 
-- `rebase` (default): use git rebase to restack branches.
-  This rewrites commit history to place commits on top of the new base.
-- `merge`: use git merge to restack branches.
+- `merge` (default): use git merge to restack branches.
   This creates merge commits with the message
   "Restack: merge {base-branch} into {branch}"
   instead of rewriting history, preserving the original commit structure.
+- `rebase`: use git rebase to restack branches.
+  This rewrites commit history to place commits on top of the new base.
 
-**When to use merge-based restacking:**
+**When to use rebase-based restacking:**
 
-Use `merge` if you:
+Use `rebase` if you:
+
+- Want a linear commit history
+- Follow a workflow that requires clean, rebased branches
+- Are comfortable with rewriting commit history
+
+Use `merge` (default) if you:
 
 - Want to preserve the original commit history without rewriting
 - Are working in environments where rewriting history is discouraged
 - Need to maintain exact commit hashes for auditing or compliance
 - Prefer explicit merge commits showing when branches were integrated
 
-Use `rebase` (default) if you:
-
-- Want a linear commit history
-- Follow a workflow that requires clean, rebased branches
-- Are comfortable with rewriting commit history
-
 **Example:**
 
 ```bash
-# Configure merge-based restacking globally
-git config --global spice.restack.method merge
+# Configure rebase-based restacking globally
+git config --global spice.restack.method rebase
 
-# Configure merge-based restacking for current repository only
-git config --local spice.restack.method merge
+# Configure rebase-based restacking for current repository only
+git config --local spice.restack.method rebase
 
-# Configure rebase-based restacking (default)
-git config spice.restack.method rebase
+# Configure merge-based restacking (default)
+git config spice.restack.method merge
 ```
 
 **Conflict resolution:**

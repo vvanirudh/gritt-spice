@@ -14,11 +14,11 @@ type RestackMethod int
 
 const (
 	// RestackMethodRebase uses git rebase to restack branches.
-	// This is the default method.
 	RestackMethodRebase RestackMethod = iota
 
 	// RestackMethodMerge uses git merge to restack branches.
-	// This preserves history by creating merge commits.
+	// This is the default method.
+	// It preserves history by creating merge commits.
 	RestackMethodMerge
 )
 
