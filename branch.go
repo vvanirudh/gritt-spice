@@ -33,6 +33,9 @@ type branchCmd struct {
 	Restack branchRestackCmd `cmd:"" aliases:"r" help:"Restack a branch"`
 	Onto    branchOntoCmd    `cmd:"" aliases:"on" help:"Move a branch onto another branch"`
 
+	// Inspection
+	Diff branchDiffCmd `cmd:"" aliases:"di" help:"Show diff between a branch and its base"`
+
 	// Pull request management
 	Submit  branchSubmitCmd  `cmd:"" aliases:"s" help:"Submit a branch"`
 	Reviews branchReviewsCmd `cmd:"" help:"Summarize open PR review threads"`
