@@ -117,16 +117,20 @@ var _ = shamhubRESTHandler("POST /{owner}/{repo}/change/details", (*ShamHub).han
 func (sh *ShamHub) handleDetails(_ context.Context, req *detailsRequest) (*detailsResponse, error) {
 	owner, repo := req.Owner, req.Repo
 
-	changeNumToIdx := make(map[int]int, len(req.IDs))
+	// Map from change number to all positions it appears in req.IDs.
+	// This handles duplicate IDs and ensures the response length always
+	// matches len(req.IDs), preserving the 1:1 positional mapping
+	// that callers expect.
+	changeNumToIdxs := make(map[int][]int, len(req.IDs))
 	for i, id := range req.IDs {
-		changeNumToIdx[int(id)] = i
+		changeNumToIdxs[int(id)] = append(changeNumToIdxs[int(id)], i)
 	}
 
 	sh.mu.RLock()
-	details := make([]changeDetail, len(changeNumToIdx))
+	details := make([]changeDetail, len(req.IDs))
 	for _, c := range sh.changes {
 		if c.Base.Owner == owner && c.Base.Repo == repo {
-			idx, ok := changeNumToIdx[c.Number]
+			idxs, ok := changeNumToIdxs[c.Number]
 			if !ok {
 				continue
 			}
@@ -151,22 +155,25 @@ func (sh *ShamHub) handleDetails(_ context.Context, req *detailsRequest) (*detai
 				reviewDecision = "approved"
 			}
 
-			details[idx] = changeDetail{
+			d := changeDetail{
 				State:          state,
 				Draft:          c.Draft,
 				ReviewDecision: reviewDecision,
 			}
-			delete(changeNumToIdx, c.Number)
+			for _, idx := range idxs {
+				details[idx] = d
+			}
+			delete(changeNumToIdxs, c.Number)
 
-			if len(changeNumToIdx) == 0 {
+			if len(changeNumToIdxs) == 0 {
 				break
 			}
 		}
 	}
 	sh.mu.RUnlock()
 
-	if len(changeNumToIdx) > 0 {
-		return nil, notFoundErrorf("changes not found: %v", changeNumToIdx)
+	if len(changeNumToIdxs) > 0 {
+		return nil, notFoundErrorf("changes not found: %v", changeNumToIdxs)
 	}
 
 	return &detailsResponse{Details: details}, nil

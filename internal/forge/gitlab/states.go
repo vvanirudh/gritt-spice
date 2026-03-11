@@ -37,7 +37,7 @@ func (r *Repository) ChangesStates(ctx context.Context, ids []forge.ChangeID) ([
 	for i, id := range mrIDs {
 		mr, ok := mrMap[id]
 		if !ok {
-			states[i] = forge.ChangeOpen // default for missing MRs
+			// MR not returned; leave zero-value state so callers can detect it.
 			continue
 		}
 		switch mr.State {
