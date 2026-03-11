@@ -15,15 +15,19 @@ func (r *Repository) ChangesStates(ctx context.Context, ids []forge.ChangeID) ([
 		mrIDs[i] = mustMR(id).Number
 	}
 
+	allStates := "all"
 	mergeRequests, _, err := r.client.MergeRequests.ListProjectMergeRequests(
-		r.repoID, &gitlab.ListProjectMergeRequestsOptions{IIDs: &mrIDs},
+		r.repoID, &gitlab.ListProjectMergeRequestsOptions{
+			IIDs:  &mrIDs,
+			State: &allStates,
+		},
 		gitlab.WithContext(ctx),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
 
-	// create a map of MR IDs to MRs
+	// Create a map of MR IDs to MRs.
 	mrMap := make(map[int64]*gitlab.BasicMergeRequest)
 	for _, mr := range mergeRequests {
 		mrMap[mr.IID] = mr
@@ -31,7 +35,11 @@ func (r *Repository) ChangesStates(ctx context.Context, ids []forge.ChangeID) ([
 
 	states := make([]forge.ChangeState, len(mrIDs))
 	for i, id := range mrIDs {
-		mr := mrMap[id]
+		mr, ok := mrMap[id]
+		if !ok {
+			states[i] = forge.ChangeOpen // default for missing MRs
+			continue
+		}
 		switch mr.State {
 		case "opened":
 			states[i] = forge.ChangeOpen
@@ -55,8 +63,12 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 		mrIDs[i] = mustMR(id).Number
 	}
 
+	allStates := "all"
 	mergeRequests, _, err := r.client.MergeRequests.ListProjectMergeRequests(
-		r.repoID, &gitlab.ListProjectMergeRequestsOptions{IIDs: &mrIDs},
+		r.repoID, &gitlab.ListProjectMergeRequestsOptions{
+			IIDs:  &mrIDs,
+			State: &allStates,
+		},
 		gitlab.WithContext(ctx),
 	)
 	if err != nil {
@@ -70,7 +82,11 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 
 	details := make([]forge.ChangeDetails, len(mrIDs))
 	for i, id := range mrIDs {
-		mr := mrMap[id]
+		mr, ok := mrMap[id]
+		if !ok {
+			// MR not found; return zero-value details.
+			continue
+		}
 		details[i] = forge.ChangeDetails{
 			State: forgeChangeState(mr.State),
 			Draft: mr.Draft,

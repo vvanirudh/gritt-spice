@@ -449,6 +449,9 @@ func (h *Handler) loadChangeDetails(
 	if err != nil {
 		return fmt.Errorf("retrieve change details: %w", err)
 	}
+	if len(details) != len(changeIDs) {
+		return fmt.Errorf("forge returned %d details for %d changes", len(details), len(changeIDs))
+	}
 
 	for j, idx := range branchesIdx {
 		branches[idx].ChangeState = details[j].State
