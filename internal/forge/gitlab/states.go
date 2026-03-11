@@ -46,3 +46,63 @@ func (r *Repository) ChangesStates(ctx context.Context, ids []forge.ChangeID) ([
 
 	return states, nil
 }
+
+// ChangesDetails retrieves state, draft status, and review decision
+// for the given changes in bulk.
+func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) ([]forge.ChangeDetails, error) {
+	mrIDs := make([]int64, len(ids))
+	for i, id := range ids {
+		mrIDs[i] = mustMR(id).Number
+	}
+
+	mergeRequests, _, err := r.client.MergeRequests.ListProjectMergeRequests(
+		r.repoID, &gitlab.ListProjectMergeRequestsOptions{IIDs: &mrIDs},
+		gitlab.WithContext(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	mrMap := make(map[int64]*gitlab.BasicMergeRequest)
+	for _, mr := range mergeRequests {
+		mrMap[mr.IID] = mr
+	}
+
+	details := make([]forge.ChangeDetails, len(mrIDs))
+	for i, id := range mrIDs {
+		mr := mrMap[id]
+		details[i] = forge.ChangeDetails{
+			State: forgeChangeState(mr.State),
+			Draft: mr.Draft,
+			ReviewDecision: gitlabReviewDecision(
+				mr.Reviewers,
+				mr.DetailedMergeStatus,
+			),
+		}
+	}
+
+	return details, nil
+}
+
+// gitlabReviewDecision maps GitLab reviewer and merge status info
+// to a forge.ChangeReviewDecision.
+//
+// GitLab does not have a single "review decision" field like GitHub.
+// We approximate it using:
+//   - "approved" DetailedMergeStatus → ChangeReviewApproved
+//   - non-empty reviewer list → ChangeReviewRequired
+//   - otherwise → ChangeReviewNoReview
+func gitlabReviewDecision(
+	reviewers []*gitlab.BasicUser,
+	detailedMergeStatus string,
+) forge.ChangeReviewDecision {
+	if detailedMergeStatus == "approved" {
+		return forge.ChangeReviewApproved
+	}
+
+	if len(reviewers) > 0 {
+		return forge.ChangeReviewRequired
+	}
+
+	return forge.ChangeReviewNoReview
+}
