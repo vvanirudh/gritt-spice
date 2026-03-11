@@ -49,6 +49,9 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 				State          githubv4.PullRequestState          `graphql:"state"`
 				IsDraft        githubv4.Boolean                   `graphql:"isDraft"`
 				ReviewDecision githubv4.PullRequestReviewDecision `graphql:"reviewDecision"`
+				ReviewRequests struct {
+					TotalCount githubv4.Int `graphql:"totalCount"`
+				} `graphql:"reviewRequests"`
 			} `graphql:"... on PullRequest"`
 		} `graphql:"nodes(ids: $ids)"`
 	}
@@ -71,16 +74,30 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 	for i, node := range q.Nodes {
 		pr := node.PullRequest
 		details[i] = forge.ChangeDetails{
-			State:          forgeChangeState(pr.State),
-			Draft:          bool(pr.IsDraft),
-			ReviewDecision: forgeReviewDecision(pr.ReviewDecision),
+			State: forgeChangeState(pr.State),
+			Draft: bool(pr.IsDraft),
+			ReviewDecision: forgeReviewDecision(
+				pr.ReviewDecision,
+				int(pr.ReviewRequests.TotalCount),
+			),
 		}
 	}
 
 	return details, nil
 }
 
-func forgeReviewDecision(d githubv4.PullRequestReviewDecision) forge.ChangeReviewDecision {
+// forgeReviewDecision maps a GitHub reviewDecision and pending review request
+// count to a forge.ChangeReviewDecision.
+//
+// reviewDecision is only set when branch protection rules require a review.
+// When reviewers have been requested but no such rule exists,
+// reviewDecision is empty even though reviews are pending.
+// In that case, a non-zero pendingReviewCount is used as a fallback
+// to detect that reviews have been requested.
+func forgeReviewDecision(
+	d githubv4.PullRequestReviewDecision,
+	pendingReviewCount int,
+) forge.ChangeReviewDecision {
 	switch d {
 	case githubv4.PullRequestReviewDecisionApproved:
 		return forge.ChangeReviewApproved
@@ -88,7 +105,14 @@ func forgeReviewDecision(d githubv4.PullRequestReviewDecision) forge.ChangeRevie
 		return forge.ChangeReviewChangesRequested
 	case githubv4.PullRequestReviewDecisionReviewRequired:
 		return forge.ChangeReviewRequired
-	default:
-		return forge.ChangeReviewNoReview
 	}
+
+	// reviewDecision is null when no branch protection rule requires a review,
+	// even if reviewers have been requested.
+	// Fall back to the pending review request count.
+	if pendingReviewCount > 0 {
+		return forge.ChangeReviewRequired
+	}
+
+	return forge.ChangeReviewNoReview
 }
