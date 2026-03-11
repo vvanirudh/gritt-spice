@@ -10,10 +10,10 @@ import (
 
 func TestForgeReviewDecision(t *testing.T) {
 	tests := []struct {
-		name    string
-		d       githubv4.PullRequestReviewDecision
-		logins  []string
-		want    forge.ChangeReviewDecision
+		name             string
+		d                githubv4.PullRequestReviewDecision
+		hasHumanReviewer bool
+		want             forge.ChangeReviewDecision
 	}{
 		{
 			name: "Approved",
@@ -35,30 +35,20 @@ func TestForgeReviewDecision(t *testing.T) {
 			want: forge.ChangeReviewNoReview,
 		},
 		{
-			name:   "HumanReviewerPending",
-			logins: []string{"alice"},
-			want:   forge.ChangeReviewRequired,
+			name:             "HumanReviewerPending",
+			hasHumanReviewer: true,
+			want:             forge.ChangeReviewRequired,
 		},
 		{
-			name:   "BotOnlyReviewerIgnored",
-			logins: []string{"copilot-pull-request-reviewer[bot]"},
-			want:   forge.ChangeReviewNoReview,
-		},
-		{
-			name:   "MultipleBotReviewersIgnored",
-			logins: []string{"copilot-pull-request-reviewer[bot]", "some-other-bot[bot]"},
-			want:   forge.ChangeReviewNoReview,
-		},
-		{
-			name:   "BotAndHumanReviewers",
-			logins: []string{"copilot-pull-request-reviewer[bot]", "alice"},
-			want:   forge.ChangeReviewRequired,
+			name:             "BotOnlyReviewerIgnored",
+			hasHumanReviewer: false,
+			want:             forge.ChangeReviewNoReview,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := forgeReviewDecision(tt.d, tt.logins)
+			got := forgeReviewDecision(tt.d, tt.hasHumanReviewer)
 			assert.Equal(t, tt.want, got)
 		})
 	}
