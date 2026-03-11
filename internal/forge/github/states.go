@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/shurcooL/githubv4"
 	"go.abhg.dev/gs/internal/forge"
@@ -50,8 +51,14 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 				IsDraft        githubv4.Boolean                   `graphql:"isDraft"`
 				ReviewDecision githubv4.PullRequestReviewDecision `graphql:"reviewDecision"`
 				ReviewRequests struct {
-					TotalCount githubv4.Int `graphql:"totalCount"`
-				} `graphql:"reviewRequests"`
+					Nodes []struct {
+						RequestedReviewer struct {
+							Actor struct {
+								Login githubv4.String `graphql:"login"`
+							} `graphql:"... on Actor"`
+						} `graphql:"requestedReviewer"`
+					} `graphql:"nodes"`
+				} `graphql:"reviewRequests(first: 100)"`
 			} `graphql:"... on PullRequest"`
 		} `graphql:"nodes(ids: $ids)"`
 	}
@@ -73,12 +80,16 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 	details := make([]forge.ChangeDetails, len(ids))
 	for i, node := range q.Nodes {
 		pr := node.PullRequest
+		reviewerLogins := make([]string, len(pr.ReviewRequests.Nodes))
+		for j, rr := range pr.ReviewRequests.Nodes {
+			reviewerLogins[j] = string(rr.RequestedReviewer.Actor.Login)
+		}
 		details[i] = forge.ChangeDetails{
 			State: forgeChangeState(pr.State),
 			Draft: bool(pr.IsDraft),
 			ReviewDecision: forgeReviewDecision(
 				pr.ReviewDecision,
-				int(pr.ReviewRequests.TotalCount),
+				reviewerLogins,
 			),
 		}
 	}
@@ -87,16 +98,18 @@ func (r *Repository) ChangesDetails(ctx context.Context, ids []forge.ChangeID) (
 }
 
 // forgeReviewDecision maps a GitHub reviewDecision and pending review request
-// count to a forge.ChangeReviewDecision.
+// logins to a forge.ChangeReviewDecision.
 //
 // reviewDecision is only set when branch protection rules require a review.
 // When reviewers have been requested but no such rule exists,
 // reviewDecision is empty even though reviews are pending.
-// In that case, a non-zero pendingReviewCount is used as a fallback
+// In that case, non-bot pending reviewers are used as a fallback
 // to detect that reviews have been requested.
+// Bot reviewers (logins ending in "[bot]") are ignored,
+// as they are automated and not human reviewers.
 func forgeReviewDecision(
 	d githubv4.PullRequestReviewDecision,
-	pendingReviewCount int,
+	pendingReviewerLogins []string,
 ) forge.ChangeReviewDecision {
 	switch d {
 	case githubv4.PullRequestReviewDecisionApproved:
@@ -109,9 +122,11 @@ func forgeReviewDecision(
 
 	// reviewDecision is null when no branch protection rule requires a review,
 	// even if reviewers have been requested.
-	// Fall back to the pending review request count.
-	if pendingReviewCount > 0 {
-		return forge.ChangeReviewRequired
+	// Fall back to the pending reviewer list, ignoring bot reviewers.
+	for _, login := range pendingReviewerLogins {
+		if !strings.HasSuffix(login, "[bot]") {
+			return forge.ChangeReviewRequired
+		}
 	}
 
 	return forge.ChangeReviewNoReview
