@@ -1,4 +1,5 @@
-# 'gs branch submit' uses --force-with-lease only for non-fast-forward updates.
+# 'gs branch submit' should not auto-upgrade to --force-with-lease
+# in merge restack mode.
 
 as 'Test <test@example.com>'
 at '2026-04-17T09:00:00Z'
@@ -10,9 +11,6 @@ cd repo
 git init
 git commit --allow-empty -m 'Initial commit'
 
-# This behavior is for rebase-based workflows.
-git config spice.restack.method rebase
-
 # set up a fake GitHub remote
 shamhub init
 shamhub register alice
@@ -22,21 +20,16 @@ git push origin main
 env SHAMHUB_USERNAME=alice
 gs auth login
 
+# merge-based restacking is the default; set explicitly for clarity
+git config spice.restack.method merge
+
 # create and submit a branch
 git add feature.txt
 gs bc -m 'Add feature' feature
 gs branch submit --fill
 stderr 'Created #'
 
-# fast-forward update should not use --force-with-lease
-cp $WORK/extra/fast-forward-update.txt feature.txt
-git add feature.txt
-gs cc -m 'Update feature'
-gs branch submit
-stderr 'Updated #'
-! stderr 'lease\.ref=feature'
-
-# now create a non-fast-forward scenario in another clone
+# create a non-fast-forward scenario in another clone
 cd $WORK
 shamhub clone alice/example fork
 cd fork
@@ -46,15 +39,19 @@ git add feature.txt
 git commit -m 'Remote update'
 git push
 
-# local branch diverges and submit should attempt force-with-lease
+# local branch diverges; submit should not use force-with-lease
 cd $WORK/repo
 git fetch origin feature
 cp $WORK/extra/local-update.txt feature.txt
 git add feature.txt
 git commit -m 'Local update'
 
-gs branch submit
-stderr 'lease\.ref=feature'
+! gs branch submit
+stderr 'non-fast-forward'
+stderr 'run again with --force'
+! stderr 'lease\.ref=feature'
+
+gs branch submit --force
 stderr 'Updated #'
 
 -- repo/feature.txt --
@@ -63,10 +60,6 @@ base
 -- extra/remote-update.txt --
 base
 remote update
-
--- extra/fast-forward-update.txt --
-base
-fast-forward update
 
 -- extra/local-update.txt --
 base

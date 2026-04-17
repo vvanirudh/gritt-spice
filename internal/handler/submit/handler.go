@@ -84,6 +84,9 @@ type Handler struct {
 	Store      Store            // required
 	Service    Service          // required
 	Browser    browser.Launcher // required
+	// RestackMethod controls whether submit may auto-upgrade
+	// non-fast-forward pushes to force-with-lease.
+	RestackMethod spice.RestackMethod
 
 	// TODO: these should not be a func reference
 	// this whole memoize thing is a bit of a hack
@@ -746,15 +749,29 @@ func (h *Handler) submitBranch(
 		// we may need a force push.
 		// Use a --force-with-lease only if this push
 		// cannot be done as a fast-forward update.
-		if !opts.Force {
+		if !opts.Force && h.RestackMethod != spice.RestackMethodMerge {
 			existingHash, err := h.Repository.PeelToCommit(ctx, remote+"/"+upstreamBranch)
 			if err == nil && !h.Repository.IsAncestor(ctx, existingHash, commitHash) {
 				pushOpts.ForceWithLease = upstreamBranch + ":" + existingHash.String()
 			}
 		}
+		if !opts.Force && h.RestackMethod == spice.RestackMethodMerge {
+			existingHash, err := h.Repository.PeelToCommit(ctx, remote+"/"+upstreamBranch)
+			if err == nil && !h.Repository.IsAncestor(ctx, existingHash, commitHash) {
+				return status, rejectNonFastForwardPush(log, upstreamBranch, h.RestackMethod)
+			}
+		}
 
 		err = h.Worktree.Push(ctx, pushOpts)
 		if err != nil {
+			if !opts.Force && isNonFastForwardPushError(err) {
+				log.Errorf("Push rejected: remote branch %q has diverged (non-fast-forward).", upstreamBranch)
+				if h.RestackMethod == spice.RestackMethodMerge {
+					log.Errorf("Merge-based restacking is enabled, so submit won't auto-force this push.")
+				}
+				log.Errorf("If you still want to overwrite the remote branch, run again with --force.")
+				return status, errors.New("refusing non-fast-forward push without --force")
+			}
 			return status, fmt.Errorf("push branch: %w", err)
 		}
 
@@ -928,7 +945,7 @@ func (h *Handler) submitBranch(
 				Force:    opts.Force,
 				NoVerify: opts.NoVerify,
 			}
-			if !opts.Force {
+			if !opts.Force && h.RestackMethod != spice.RestackMethodMerge {
 				// Force push, but only if the ref is exactly
 				// where we think it is, and only if needed.
 				existingHash, err := h.Repository.PeelToCommit(ctx, remote+"/"+upstreamBranch)
@@ -936,8 +953,22 @@ func (h *Handler) submitBranch(
 					pushOpts.ForceWithLease = upstreamBranch + ":" + existingHash.String()
 				}
 			}
+			if !opts.Force && h.RestackMethod == spice.RestackMethodMerge {
+				existingHash, err := h.Repository.PeelToCommit(ctx, remote+"/"+upstreamBranch)
+				if err == nil && !h.Repository.IsAncestor(ctx, existingHash, commitHash) {
+					return status, rejectNonFastForwardPush(log, upstreamBranch, h.RestackMethod)
+				}
+			}
 
 			if err := h.Worktree.Push(ctx, pushOpts); err != nil {
+				if !opts.Force && isNonFastForwardPushError(err) {
+					log.Errorf("Push rejected: remote branch %q has diverged (non-fast-forward).", upstreamBranch)
+					if h.RestackMethod == spice.RestackMethodMerge {
+						log.Errorf("Merge-based restacking is enabled, so submit won't auto-force this push.")
+					}
+					log.Errorf("If you still want to overwrite the remote branch, run again with --force.")
+					return status, errors.New("refusing non-fast-forward push without --force")
+				}
 				log.Error("Push failed. Branch may have been updated by someone else. Try with --force.")
 				return status, fmt.Errorf("push branch: %w", err)
 			}
@@ -969,6 +1000,21 @@ func (h *Handler) submitBranch(
 	}
 
 	return status, nil
+}
+
+func isNonFastForwardPushError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "non-fast-forward") ||
+		strings.Contains(msg, "fetch first")
+}
+
+func rejectNonFastForwardPush(log *silog.Logger, upstreamBranch string, restackMethod spice.RestackMethod) error {
+	log.Errorf("Push rejected: remote branch %q has diverged (non-fast-forward).", upstreamBranch)
+	if restackMethod == spice.RestackMethodMerge {
+		log.Errorf("Merge-based restacking is enabled, so submit won't auto-force this push.")
+	}
+	log.Errorf("If you still want to overwrite the remote branch, run again with --force.")
+	return errors.New("refusing non-fast-forward push without --force")
 }
 
 func (h *Handler) prepareBranch(

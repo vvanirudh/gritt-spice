@@ -386,14 +386,20 @@ func (cmd *mainCmd) AfterApply(ctx context.Context, kctx *kong.Context, logger *
 			secretStash secret.Stash,
 			forges *forge.Registry,
 		) (SubmitHandler, error) {
+			restackMethod := spice.RestackMethodRebase
+			if cmd.Globals.RestackMethod == "merge" {
+				restackMethod = spice.RestackMethodMerge
+			}
+
 			return &submit.Handler{
-				Log:        log,
-				View:       view,
-				Repository: wt.Repository(),
-				Worktree:   wt,
-				Store:      store,
-				Service:    svc,
-				Browser:    _browserLauncher,
+				Log:           log,
+				View:          view,
+				Repository:    wt.Repository(),
+				Worktree:      wt,
+				Store:         store,
+				Service:       svc,
+				Browser:       _browserLauncher,
+				RestackMethod: restackMethod,
 				FindRemote: func(ctx context.Context) (string, error) {
 					return ensureRemote(ctx, wt.Repository(), store, log, view)
 				},
