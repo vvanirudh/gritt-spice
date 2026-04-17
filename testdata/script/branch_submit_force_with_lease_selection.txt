@@ -1,0 +1,70 @@
+# 'gs branch submit' uses --force-with-lease only for non-fast-forward updates.
+
+as 'Test <test@example.com>'
+at '2026-04-17T09:00:00Z'
+
+env GIT_SPICE_VERBOSE=true
+
+# setup
+cd repo
+git init
+git commit --allow-empty -m 'Initial commit'
+
+# set up a fake GitHub remote
+shamhub init
+shamhub register alice
+shamhub new origin alice/example.git
+git push origin main
+
+env SHAMHUB_USERNAME=alice
+gs auth login
+
+# create and submit a branch
+git add feature.txt
+gs bc -m 'Add feature' feature
+gs branch submit --fill
+stderr 'Created #'
+
+# fast-forward update should not use --force-with-lease
+cp $WORK/extra/fast-forward-update.txt feature.txt
+git add feature.txt
+gs cc -m 'Update feature'
+gs branch submit
+stderr 'Updated #'
+! stderr 'lease\.ref=feature'
+
+# now create a non-fast-forward scenario in another clone
+cd $WORK
+shamhub clone alice/example fork
+cd fork
+git checkout feature
+cp $WORK/extra/remote-update.txt feature.txt
+git add feature.txt
+git commit -m 'Remote update'
+git push
+
+# local branch diverges and submit should attempt force-with-lease
+cd $WORK/repo
+git fetch origin feature
+cp $WORK/extra/local-update.txt feature.txt
+git add feature.txt
+git commit -m 'Local update'
+
+gs branch submit
+stderr 'lease\.ref=feature'
+stderr 'Updated #'
+
+-- repo/feature.txt --
+base
+
+-- extra/remote-update.txt --
+base
+remote update
+
+-- extra/fast-forward-update.txt --
+base
+fast-forward update
+
+-- extra/local-update.txt --
+base
+local update

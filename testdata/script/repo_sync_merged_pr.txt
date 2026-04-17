@@ -80,9 +80,11 @@ Contents of feature2
 }
 
 -- golden/merged-log.txt --
-* bd70ef4 (feature2) Add feature2
-*   614e5f2 (HEAD -> main, origin/main) Merge change #1
-|\  
-| * 9f1c9af Add feature1
+* b75bc0c (feature2) Add feature2
+| *   614e5f2 (HEAD -> main, origin/main) Merge change #1
+| |\  
+| |/  
+|/|   
+* | 9f1c9af Add feature1
 |/  
 * d90607e Initial commit

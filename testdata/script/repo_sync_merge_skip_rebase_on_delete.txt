@@ -1,0 +1,51 @@
+# With merge restack method, repo sync should delete merged branches
+# while marking upstack branches as needs restack (without rebasing them).
+
+as 'Test <test@example.com>'
+at '2026-04-17T09:10:00Z'
+
+# setup
+cd repo
+git init
+git commit --allow-empty -m 'Initial commit'
+
+# Configure merge restacking.
+git config spice.restack.method merge
+
+# set up a fake GitHub remote
+shamhub init
+shamhub register alice
+shamhub new origin alice/example.git
+git push origin main
+
+env SHAMHUB_USERNAME=alice
+gs auth login
+
+# create and submit a stack: main -> feat1 -> feat2
+git add feat1.txt
+gs bc -m 'Add feat1' feat1
+git add feat2.txt
+gs bc -m 'Add feat2' feat2
+gs stack submit --fill
+stderr 'Created #1'
+stderr 'Created #2'
+
+# Merge the first change and sync.
+shamhub merge alice/example 1
+gs repo sync
+stderr 'feat1: #1 was merged'
+stderr 'feat2: moved upstack onto main \(needs restack\)'
+stderr 'feat1: deleted \(was [a-f0-9]+\)'
+
+# feat1 should be deleted, feat2 should remain and need restack.
+! git rev-parse --verify feat1
+git rev-parse --verify feat2
+
+gs ll -a
+stderr 'feat2 \(#2\) \(needs restack\)'
+
+-- repo/feat1.txt --
+feature 1
+
+-- repo/feat2.txt --
+feature 2
