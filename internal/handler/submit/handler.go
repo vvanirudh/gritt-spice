@@ -31,6 +31,7 @@ import (
 // that is used by the submit handler.
 type GitRepository interface {
 	PeelToCommit(ctx context.Context, ref string) (git.Hash, error)
+	IsAncestor(ctx context.Context, ancestor, descendant git.Hash) bool
 	PeelToTree(ctx context.Context, ref string) (git.Hash, error)
 	BranchUpstream(ctx context.Context, branch string) (string, error)
 	SetBranchUpstream(ctx context.Context, branch string, upstream string) error
@@ -742,12 +743,12 @@ func (h *Handler) submitBranch(
 		}
 
 		// If we've already pushed this branch before,
-		// we'll need a force push.
-		// Use a --force-with-lease to avoid
-		// overwriting someone else's changes.
+		// we may need a force push.
+		// Use a --force-with-lease only if this push
+		// cannot be done as a fast-forward update.
 		if !opts.Force {
 			existingHash, err := h.Repository.PeelToCommit(ctx, remote+"/"+upstreamBranch)
-			if err == nil {
+			if err == nil && !h.Repository.IsAncestor(ctx, existingHash, commitHash) {
 				pushOpts.ForceWithLease = upstreamBranch + ":" + existingHash.String()
 			}
 		}
@@ -929,9 +930,9 @@ func (h *Handler) submitBranch(
 			}
 			if !opts.Force {
 				// Force push, but only if the ref is exactly
-				// where we think it is.
+				// where we think it is, and only if needed.
 				existingHash, err := h.Repository.PeelToCommit(ctx, remote+"/"+upstreamBranch)
-				if err == nil {
+				if err == nil && !h.Repository.IsAncestor(ctx, existingHash, commitHash) {
 					pushOpts.ForceWithLease = upstreamBranch + ":" + existingHash.String()
 				}
 			}

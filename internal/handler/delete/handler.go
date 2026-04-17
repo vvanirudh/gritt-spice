@@ -71,6 +71,10 @@ type Handler struct {
 type Request struct {
 	Branches []string
 	Force    bool
+	// SkipRebase updates upstack branches to point to new bases
+	// without rebasing them.
+	// This leaves branches in a "needs restack" state.
+	SkipRebase bool
 }
 
 // DeleteBranches deletes the specified branches from the repository,
@@ -267,8 +271,8 @@ func (h *Handler) DeleteBranches(ctx context.Context, req *Request) error {
 			// Check if the upstack branch is checked out in another worktree.
 			// If so, we need to skip the rebase operation
 			// and leave the branch in a "needs restack" state.
-			var skipRebase bool
-			if above != currentBranch {
+			skipRebase := req.SkipRebase
+			if !skipRebase && above != currentBranch {
 				if worktreePath, ok := branchWorktrees[above]; ok {
 					skipRebase = true
 					log.Warnf("%v: checked out in another worktree (%v), skipping rebase", above, worktreePath)
@@ -295,7 +299,11 @@ func (h *Handler) DeleteBranches(ctx context.Context, req *Request) error {
 					Message: fmt.Sprintf("interrupted: %v: deleting branch", branch),
 				})
 			}
-			log.Infof("%v: moved upstack onto %v", above, base)
+			if skipRebase {
+				log.Infof("%v: moved upstack onto %v (needs restack)", above, base)
+			} else {
+				log.Infof("%v: moved upstack onto %v", above, base)
+			}
 		}
 	}
 

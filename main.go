@@ -512,16 +512,17 @@ func (cmd *mainCmd) AfterApply(ctx context.Context, kctx *kong.Context, logger *
 			}
 
 			return &sync.Handler{
-				Log:              log,
-				View:             view,
-				Repository:       repo,
-				Worktree:         wt,
-				Store:            store,
-				Service:          svc,
-				Delete:           deleteHandler,
-				Restack:          restackHandler,
-				Remote:           remote,
-				RemoteRepository: remoteRepo,
+				Log:                log,
+				View:               view,
+				Repository:         repo,
+				Worktree:           wt,
+				Store:              store,
+				Service:            svc,
+				Delete:             deleteHandler,
+				Restack:            restackHandler,
+				Remote:             remote,
+				RemoteRepository:   remoteRepo,
+				SkipRebaseOnDelete: cmd.Globals.RestackMethod == "merge",
 			}, nil
 		}),
 	)

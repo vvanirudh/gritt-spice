@@ -88,6 +88,9 @@ type Handler struct {
 	Remote string // required
 	// RemoteRepository is set only if remote refers to a supported forge.
 	RemoteRepository forge.Repository // optional
+	// SkipRebaseOnDelete updates upstack branches to new bases
+	// without rebasing while deleting merged branches.
+	SkipRebaseOnDelete bool
 }
 
 // ClosedChanges specifies how to handle closed Change Requests.
@@ -777,8 +780,9 @@ func (h *Handler) deleteBranches(ctx context.Context, branchesToDelete []branchD
 	}
 
 	err := h.Delete.DeleteBranches(ctx, &branchdel.Request{
-		Branches: deleteBranchNames,
-		Force:    true,
+		Branches:   deleteBranchNames,
+		Force:      true,
+		SkipRebase: h.SkipRebaseOnDelete,
 	})
 	if err != nil {
 		return fmt.Errorf("delete merged branches: %w", err)
