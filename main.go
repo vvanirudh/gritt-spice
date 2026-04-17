@@ -271,10 +271,6 @@ type mainCmd struct {
 
 	Claude claudeCmd `cmd:"" group:"AI" help:"Claude AI integration commands"`
 
-	Claude claudeCmd `cmd:"" group:"AI" help:"Claude AI integration commands"`
-
-	Claude claudeCmd `cmd:"" group:"AI" help:"Claude AI integration commands"`
-
 	// Navigation
 	Up     upCmd     `cmd:"" aliases:"u" group:"Navigation" help:"Move up one branch"`
 	Down   downCmd   `cmd:"" aliases:"d" group:"Navigation" help:"Move down one branch"`
@@ -390,14 +386,20 @@ func (cmd *mainCmd) AfterApply(ctx context.Context, kctx *kong.Context, logger *
 			secretStash secret.Stash,
 			forges *forge.Registry,
 		) (SubmitHandler, error) {
+			restackMethod := spice.RestackMethodRebase
+			if cmd.Globals.RestackMethod == "merge" {
+				restackMethod = spice.RestackMethodMerge
+			}
+
 			return &submit.Handler{
-				Log:        log,
-				View:       view,
-				Repository: wt.Repository(),
-				Worktree:   wt,
-				Store:      store,
-				Service:    svc,
-				Browser:    _browserLauncher,
+				Log:           log,
+				View:          view,
+				Repository:    wt.Repository(),
+				Worktree:      wt,
+				Store:         store,
+				Service:       svc,
+				Browser:       _browserLauncher,
+				RestackMethod: restackMethod,
 				FindRemote: func(ctx context.Context) (string, error) {
 					return ensureRemote(ctx, wt.Repository(), store, log, view)
 				},
@@ -512,16 +514,17 @@ func (cmd *mainCmd) AfterApply(ctx context.Context, kctx *kong.Context, logger *
 			}
 
 			return &sync.Handler{
-				Log:              log,
-				View:             view,
-				Repository:       repo,
-				Worktree:         wt,
-				Store:            store,
-				Service:          svc,
-				Delete:           deleteHandler,
-				Restack:          restackHandler,
-				Remote:           remote,
-				RemoteRepository: remoteRepo,
+				Log:                log,
+				View:               view,
+				Repository:         repo,
+				Worktree:           wt,
+				Store:              store,
+				Service:            svc,
+				Delete:             deleteHandler,
+				Restack:            restackHandler,
+				Remote:             remote,
+				RemoteRepository:   remoteRepo,
+				SkipRebaseOnDelete: cmd.Globals.RestackMethod == "merge",
 			}, nil
 		}),
 	)
