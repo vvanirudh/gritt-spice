@@ -15,8 +15,10 @@ Arguments:
   [<commit>]    Commit to split (default: HEAD).
 
 Flags:
-  -m, --message=MSG    Commit message for first split.
-      --no-verify      Bypass pre-commit and commit-msg hooks.
+  -m, --message=MSG          Commit message for first split.
+  -F, --message-file=FILE    Read first split commit message from the given
+                             file.
+      --no-verify            Bypass pre-commit and commit-msg hooks.
 
 Global Flags:
   -h, --help                      Show help for the command

@@ -14,9 +14,10 @@ import (
 )
 
 type commitSplitCmd struct {
-	Message  string `short:"m" placeholder:"MSG" help:"Commit message for first split."`
-	NoVerify bool   `help:"Bypass pre-commit and commit-msg hooks."`
-	Commit   string `arg:"" optional:"" help:"Commit to split (default: HEAD)."`
+	Message     string `short:"m" xor:"commit-message-source" placeholder:"MSG" help:"Commit message for first split."`
+	MessageFile string `short:"F" xor:"commit-message-source" placeholder:"FILE" help:"Read first split commit message from the given file."`
+	NoVerify    bool   `help:"Bypass pre-commit and commit-msg hooks."`
+	Commit      string `arg:"" optional:"" help:"Commit to split (default: HEAD)."`
 }
 
 func (*commitSplitCmd) Help() string {
@@ -233,7 +234,10 @@ func (cmd *commitSplitCmd) splitLoop(
 	originalMessage string,
 ) error {
 	commitNum := 1
+	// -m/--message and -F/--file apply only to the first split commit;
+	// they are mutually exclusive via the "commit-message-source" xor group.
 	nextMessage := cmd.Message
+	nextMessageFile := cmd.MessageFile
 
 	for {
 		log.Infof("Select hunks for commit %d", commitNum)
@@ -256,19 +260,23 @@ func (cmd *commitSplitCmd) splitLoop(
 			break
 		}
 
-		// Prompt for commit message if not provided.
+		// Prompt for commit message if neither -m nor -F was provided.
 		message := nextMessage
-		if message == "" {
+		messageFile := nextMessageFile
+		if message == "" && messageFile == "" {
 			if err := cmd.promptMessage(view, &message, originalMessage, commitNum); err != nil {
 				return fmt.Errorf("prompt message: %w", err)
 			}
 		}
-		nextMessage = "" // Only use -m for first commit.
+		// Only use -m/-F for the first commit.
+		nextMessage = ""
+		nextMessageFile = ""
 
 		// Create the split commit.
 		if err := wt.Commit(ctx, git.CommitRequest{
-			Message:  message,
-			NoVerify: cmd.NoVerify,
+			Message:     message,
+			MessageFile: messageFile,
+			NoVerify:    cmd.NoVerify,
 		}); err != nil {
 			return fmt.Errorf("commit: %w", err)
 		}
