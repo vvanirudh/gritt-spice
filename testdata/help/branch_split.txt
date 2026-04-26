@@ -45,3 +45,6 @@ Global Flags:
       --[no-]prompt               Whether to prompt for missing information
       --restack-method="merge"    Method to use for restacking (rebase or merge)
                                   (🔧 spice.restack.method)
+
+Configuration (🔧):
+  spice.branchCreate.prefix
