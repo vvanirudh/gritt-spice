@@ -415,17 +415,6 @@ func (h *Handler) submitBranch(
 	svc := h.Service
 	log := h.Log
 
-	// Refuse to submit if the branch is not restacked.
-	if !opts.Force {
-		if err := svc.VerifyRestacked(ctx, branchToSubmit); err != nil {
-			log.Errorf("Branch %s needs to be restacked.", branchToSubmit)
-			log.Errorf("Run the following command to fix this:")
-			log.Errorf("  gs branch restack --branch=%s", branchToSubmit)
-			log.Errorf("Or, try again with --force to submit anyway.")
-			return status, errors.New("refusing to submit outdated branch")
-		}
-	}
-
 	branch, err := svc.LookupBranch(ctx, branchToSubmit)
 	if err != nil {
 		return status, fmt.Errorf("lookup branch: %w", err)
@@ -655,7 +644,20 @@ func (h *Handler) submitBranch(
 			}
 			return status, nil
 		}
+	}
 
+	// Refuse to submit if the branch is not restacked.
+	if !opts.Force {
+		if err := svc.VerifyRestacked(ctx, branchToSubmit); err != nil {
+			log.Errorf("Branch %s needs to be restacked.", branchToSubmit)
+			log.Errorf("Run the following command to fix this:")
+			log.Errorf("  gs branch restack --branch=%s", branchToSubmit)
+			log.Errorf("Or, try again with --force to submit anyway.")
+			return status, errors.New("refusing to submit outdated branch")
+		}
+	}
+
+	if existingChange == nil {
 		if opts.DryRun {
 			if opts.Publish {
 				log.Infof("WOULD create a CR for %s", branchToSubmit)
