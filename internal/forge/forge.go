@@ -67,7 +67,7 @@ func MatchRemoteURL(r *Registry, remoteURL string) (forge Forge, rid RepositoryI
 // does not match any registered forge.
 var ErrUnsupportedURL = errors.New("unsupported URL")
 
-//go:generate mockgen -destination=forgetest/mocks.go -package forgetest -typed . Forge,RepositoryID,Repository
+//go:generate mockgen -destination=forgetest/mocks.go -package forgetest -typed . Forge,RepositoryID,Repository,ReviewThreadLister,ChangeChecksLister,ViewerIdentifier
 
 // TODO:
 // Forge should become a struct with multiple interfaces or funcctions
