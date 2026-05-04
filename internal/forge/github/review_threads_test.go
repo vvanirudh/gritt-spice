@@ -2,8 +2,10 @@ package github
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -357,6 +359,90 @@ func TestListReviewThreads_replies(t *testing.T) {
 	assert.Equal(t, "reply 1", item.Replies[0].Body)
 	assert.Equal(t, "alice", item.Replies[1].Author)
 	assert.Equal(t, "reply 2", item.Replies[1].Body)
+}
+
+// TestPostReviewThreadReply verifies that PostReviewThreadReply sends the
+// correct GraphQL mutation and returns the expected ChangeCommentID
+// on success, and propagates errors when the server reports them.
+func TestPostReviewThreadReply(t *testing.T) {
+	t.Run("HappyPath", func(t *testing.T) {
+		const (
+			threadID    = "THREAD_GQL_ID"
+			replyBody   = "looks good to me"
+			commentGQID = "COMMENT_GQL_ID"
+			commentURL  = "https://github.com/owner/repo/pull/1#comment-1"
+		)
+
+		var capturedBody string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			raw, err := io.ReadAll(r.Body)
+			assert.NoError(t, err)
+			capturedBody = string(raw)
+
+			enc := json.NewEncoder(w)
+			assert.NoError(t, enc.Encode(map[string]any{
+				"data": map[string]any{
+					"addPullRequestReviewThreadReply": map[string]any{
+						"comment": map[string]any{
+							"id":  commentGQID,
+							"url": commentURL,
+						},
+					},
+				},
+			}))
+		}))
+		defer srv.Close()
+
+		repo := newTestRepo(t, srv)
+		got, err := repo.PostReviewThreadReply(
+			t.Context(),
+			forge.ReviewThreadID(threadID),
+			replyBody,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+
+		// Verify the returned ChangeCommentID carries the expected GraphQL ID.
+		prc, ok := got.(*PRComment)
+		require.True(t, ok, "expected *PRComment, got %T", got)
+		assert.Equal(t, githubv4.ID(commentGQID), prc.GQLID)
+
+		// Verify the request body contained the mutation and inputs.
+		assert.Contains(t, capturedBody,
+			"addPullRequestReviewThreadReply",
+			"request body must contain the mutation name",
+		)
+		assert.Contains(t, capturedBody,
+			threadID,
+			"request body must contain the thread ID",
+		)
+		assert.True(t,
+			strings.Contains(capturedBody, replyBody),
+			"request body must contain the reply body text",
+		)
+	})
+
+	t.Run("GraphQLError", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			enc := json.NewEncoder(w)
+			assert.NoError(t, enc.Encode(map[string]any{
+				"errors": []map[string]any{
+					{"message": "thread not found"},
+				},
+			}))
+		}))
+		defer srv.Close()
+
+		repo := newTestRepo(t, srv)
+		got, err := repo.PostReviewThreadReply(
+			t.Context(),
+			forge.ReviewThreadID("NO_SUCH_THREAD"),
+			"reply",
+		)
+		assert.Nil(t, got)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "thread not found")
+	})
 }
 
 // TestIsBot verifies the isBot helper.
