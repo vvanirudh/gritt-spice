@@ -197,22 +197,22 @@ type listReviewThreadsResponse struct {
 
 // listReviewThreadItem is a single item in a list review threads response.
 type listReviewThreadItem struct {
-	ID         string                  `json:"id,omitempty"`
-	File       string                  `json:"file,omitempty"`
-	LineRange  [2]int                  `json:"lineRange,omitempty"`
-	Hunk       string                  `json:"hunk,omitempty"`
-	Author     string                  `json:"author,omitempty"`
-	Body       string                  `json:"body,omitempty"`
-	IsResolved bool                    `json:"isResolved,omitempty"`
-	URL        string                  `json:"url,omitempty"`
-	Replies    []*listReviewReplyItem  `json:"replies,omitempty"`
+	ID         string                 `json:"id,omitempty"`
+	File       string                 `json:"file,omitempty"`
+	LineRange  [2]int                 `json:"lineRange,omitempty"`
+	Hunk       string                 `json:"hunk,omitempty"`
+	Author     string                 `json:"author,omitempty"`
+	Body       string                 `json:"body,omitempty"`
+	IsResolved bool                   `json:"isResolved,omitempty"`
+	URL        string                 `json:"url,omitempty"`
+	Replies    []*listReviewReplyItem `json:"replies,omitempty"`
 }
 
 // listReviewReplyItem is a single reply in a list review threads response.
 type listReviewReplyItem struct {
 	Author    string    `json:"author,omitempty"`
 	Body      string    `json:"body,omitempty"`
-	CreatedAt time.Time `json:"createdAt,omitempty"`
+	CreatedAt time.Time `json:"createdAt,omitzero"`
 }
 
 // handleListReviewThreads handles GET /{owner}/{repo}/changes/{number}/review_threads.

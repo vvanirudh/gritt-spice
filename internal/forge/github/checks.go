@@ -43,7 +43,7 @@ func (r *Repository) ListChangeChecks(
 									Nodes []struct {
 										CheckRuns struct {
 											Nodes []struct {
-												ID          githubv4.ID       `graphql:"id"`
+												ID          githubv4.ID        `graphql:"id"`
 												Name        string             `graphql:"name"`
 												Status      string             `graphql:"status"`
 												Conclusion  *string            `graphql:"conclusion"`
@@ -119,7 +119,7 @@ func (r *Repository) ListChangeChecks(
 // to call GET /repos/{owner}/{repo}/check-runs/{check_run_id}/logs.
 // Currently only a *githubv4.Client is available on Repository.
 func (r *Repository) GetCheckLog(
-	ctx context.Context,
+	_ context.Context,
 	runID forge.CheckRunID,
 ) (io.ReadCloser, error) {
 	return nil, fmt.Errorf(

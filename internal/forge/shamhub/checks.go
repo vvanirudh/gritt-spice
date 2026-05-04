@@ -144,8 +144,8 @@ type listCheckItem struct {
 	Status     string    `json:"status,omitempty"`
 	Conclusion string    `json:"conclusion,omitempty"`
 	URL        string    `json:"url,omitempty"`
-	StartedAt  time.Time `json:"startedAt,omitempty"`
-	EndedAt    time.Time `json:"endedAt,omitempty"`
+	StartedAt  time.Time `json:"startedAt,omitzero"`
+	EndedAt    time.Time `json:"endedAt,omitzero"`
 }
 
 // handleListChecks handles POST /{owner}/{repo}/changes/{number}/checks/list.
