@@ -16,6 +16,13 @@ import (
 	"go.abhg.dev/gs/internal/silog/silogtest"
 )
 
+// This file uses httptest-backed mocks rather than the cassette pattern
+// in integration_test.go because the logic under test is client-side
+// filtering of GraphQL responses (resolved-state, bot allowlist, line-range
+// projection); a recorded fixture would not exercise that filtering and
+// would couple tests to a specific GitHub PR shape. integration_test.go
+// covers the wire-level integration with cassettes.
+
 // threadComment is the JSON representation of a review comment
 // as returned by the GitHub GraphQL API in tests.
 type threadComment struct {
@@ -31,10 +38,10 @@ type threadComment struct {
 // threadNode is the JSON representation of a review thread
 // as returned by the GitHub GraphQL API in tests.
 type threadNode struct {
-	ID         string          `json:"id"`
-	Path       string          `json:"path"`
-	IsResolved bool            `json:"isResolved"`
-	Comments   map[string]any  `json:"comments"`
+	ID         string         `json:"id"`
+	Path       string         `json:"path"`
+	IsResolved bool           `json:"isResolved"`
+	Comments   map[string]any `json:"comments"`
 }
 
 // makeThreadResponse builds the JSON response body for a
@@ -86,10 +93,10 @@ func TestListReviewThreads_resolvedFiltering(t *testing.T) {
 			Path: "foo.go",
 			Comments: makeComments([]threadComment{
 				{
-					Author:  map[string]string{"login": "alice"},
-					Body:    "open thread",
-					URL:     "https://example.com/t1",
-					Line:    intPtr(10),
+					Author: map[string]string{"login": "alice"},
+					Body:   "open thread",
+					URL:    "https://example.com/t1",
+					Line:   intPtr(10),
 				},
 			}),
 		},
@@ -99,10 +106,10 @@ func TestListReviewThreads_resolvedFiltering(t *testing.T) {
 			IsResolved: true,
 			Comments: makeComments([]threadComment{
 				{
-					Author:  map[string]string{"login": "bob"},
-					Body:    "resolved thread",
-					URL:     "https://example.com/t2",
-					Line:    intPtr(20),
+					Author: map[string]string{"login": "bob"},
+					Body:   "resolved thread",
+					URL:    "https://example.com/t2",
+					Line:   intPtr(20),
 				},
 			}),
 		},

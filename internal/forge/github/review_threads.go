@@ -146,8 +146,7 @@ func (r *Repository) ListReviewThreads(
 				return
 			}
 
-			variables["after"] =
-				q.Node.PullRequest.ReviewThreads.PageInfo.EndCursor
+			variables["after"] = q.Node.PullRequest.ReviewThreads.PageInfo.EndCursor
 		}
 	}
 }
@@ -167,12 +166,7 @@ func (r *Repository) PostReviewThreadReply(
 		} `graphql:"addPullRequestReviewThreadReply(input: $input)"`
 	}
 
-	type addReplyInput struct {
-		PullRequestReviewThreadID githubv4.ID     `json:"pullRequestReviewThreadId"`
-		Body                      githubv4.String `json:"body"`
-	}
-
-	input := addReplyInput{
+	input := githubv4.AddPullRequestReviewThreadReplyInput{
 		PullRequestReviewThreadID: githubv4.ID(threadID),
 		Body:                      githubv4.String(body),
 	}
