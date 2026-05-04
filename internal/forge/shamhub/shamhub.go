@@ -40,6 +40,7 @@ type ShamHub struct {
 	comments       []shamComment       // all comments
 	repos          []shamRepo          // all repositories
 	reviewThreads  []shamReviewThread  // all review threads
+	checks         []shamCheck         // all check runs
 
 	tokens map[string]string // token -> username
 }
