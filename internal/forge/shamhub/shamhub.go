@@ -34,11 +34,12 @@ type ShamHub struct {
 	apiServer *httptest.Server // API server
 	gitServer *httptest.Server // Git HTTP remote
 
-	mu       sync.RWMutex
-	changes  []shamChange  // all changes
-	users    []shamUser    // all users
-	comments []shamComment // all comments
-	repos    []shamRepo    // all repositories
+	mu             sync.RWMutex
+	changes        []shamChange        // all changes
+	users          []shamUser          // all users
+	comments       []shamComment       // all comments
+	repos          []shamRepo          // all repositories
+	reviewThreads  []shamReviewThread  // all review threads
 
 	tokens map[string]string // token -> username
 }
