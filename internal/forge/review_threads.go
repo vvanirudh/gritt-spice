@@ -35,6 +35,8 @@ type ReviewThreadItem struct {
 
 	// LineRange is the inclusive [start, end] line range
 	// within the file that the thread covers.
+	// Both elements are 0 when the thread is not anchored to a line range
+	// (e.g. file-level comments or comments on deleted files).
 	LineRange [2]int
 
 	// Hunk is the diff hunk context shown alongside the thread.
@@ -128,8 +130,12 @@ type ChangeCheckItem struct {
 // ListChangeChecksOptions specifies filtering options
 // for listing CI check runs on a change.
 type ListChangeChecksOptions struct {
-	// OnlyFailing limits results to check runs that have failed.
-	// Defaults to true.
+	// OnlyFailing limits results to failed check runs (conclusion of
+	// "failure", "timed_out", "cancelled", or "action_required").
+	// When the entire ListChangeChecksOptions is nil, implementations
+	// default OnlyFailing to true.
+	// When the struct is passed but the field is left at its zero value,
+	// all check runs are returned.
 	OnlyFailing bool
 }
 
