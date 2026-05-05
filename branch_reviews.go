@@ -145,9 +145,12 @@ func (c *branchReviewsCmd) Run(
 		threads = append(threads, thread)
 	}
 
-	// Load and reconcile deferred threads.
+	// Load and reconcile deferred threads. Use the worktree's actual
+	// .git dir (which differs between main checkout and worktree —
+	// see Worktree.GitDir doc) so the file lands in the right place
+	// when invoked from a worktree, where .git is a file pointer.
 	deferredPath := filepath.Join(
-		wt.RootDir(), ".git", "spice", "address-deferred",
+		wt.GitDir(), "spice", "address-deferred",
 	)
 	if c.ResetDeferred {
 		if err := os.Remove(deferredPath); err != nil && !os.IsNotExist(err) {
