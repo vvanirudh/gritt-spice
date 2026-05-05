@@ -105,9 +105,12 @@ func (c *stackReviewsCmd) Run(
 	return nil
 }
 
-// ensureCleanTree returns an error if the working tree has uncommitted
-// changes (staged or unstaged). Untracked files are intentionally not
-// checked here — git checkout carries them across branches safely.
+// ensureCleanTree returns an error if the working tree has any local
+// state that should be committed or stashed before checking out
+// another branch: staged changes, unstaged changes, or untracked
+// files. Untracked files are included because they're easy for the
+// user to lose track of when bouncing branches and the comment
+// "uncommitted changes" implies them anyway.
 func ensureCleanTree(ctx context.Context, wt *git.Worktree) error {
 	staged, err := wt.DiffIndex(ctx, "HEAD")
 	if err != nil {
@@ -127,6 +130,15 @@ func ensureCleanTree(ctx context.Context, wt *git.Worktree) error {
 	}
 	if hasUnstaged {
 		return errors.New("working tree has uncommitted changes")
+	}
+
+	for path, err := range wt.ListUntrackedFiles(ctx) {
+		if err != nil {
+			return fmt.Errorf("check untracked files: %w", err)
+		}
+		return fmt.Errorf(
+			"working tree has untracked files (e.g. %s)", path,
+		)
 	}
 	return nil
 }
