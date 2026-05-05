@@ -182,6 +182,18 @@ func TestLoad_PreCommitFrameworkBeatsMise(t *testing.T) {
 	assert.Equal(t, "pre-commit", checks[0].Name)
 }
 
+func TestLoad_MiseReadError(t *testing.T) {
+	dir := t.TempDir()
+
+	// Make mise.toml a directory so os.ReadFile fails with an error
+	// that is not fs.ErrNotExist.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "mise.toml"), 0o755))
+
+	_, err := Load(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mise.toml")
+}
+
 func TestLoad_BadTimeout(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".gitspice"), 0o755))

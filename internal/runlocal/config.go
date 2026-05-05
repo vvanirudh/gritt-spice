@@ -44,10 +44,14 @@ func Load(repoRoot string) ([]Check, error) {
 
 	// 3. Mise auto-detect via text scan.
 	miseTomlPath := filepath.Join(repoRoot, "mise.toml")
-	if data, err := os.ReadFile(miseTomlPath); err == nil {
+	data, err := os.ReadFile(miseTomlPath)
+	switch {
+	case err == nil:
 		if checks := miseChecks(data); len(checks) > 0 {
 			return checks, nil
 		}
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, fmt.Errorf("read %s: %w", miseTomlPath, err)
 	}
 
 	// 4. Hardcoded fallback.

@@ -64,9 +64,11 @@ type Runner interface {
 	// stdout+stderr to out as each check runs and also captures
 	// the same bytes per-check into Result.Output.
 	//
-	// A non-zero ExitCode is not a Run-level error; only failures
-	// to start the process are. The caller inspects Result.ExitCode
-	// to detect check failures.
+	// All per-check outcomes are reported via Result fields:
+	// non-zero ExitCode for a normal failed exit, ExitCode = -1
+	// with Result.Err set for start failures or context cancellation.
+	// The Go error return is reserved for future Runner-level failures
+	// and is currently always nil.
 	Run(ctx context.Context, checks []Check, out io.Writer) ([]Result, error)
 }
 
@@ -77,8 +79,12 @@ type DefaultRunner struct{}
 // Run executes checks in order, streaming combined stdout+stderr to out
 // and capturing the same bytes per-check into Result.Output.
 //
-// A non-zero exit code is not a Run-level error.
-// Only process-start failures are returned as errors.
+// All per-check outcomes are reported via Result fields rather than
+// the Go error return: non-zero ExitCode for a normal failed exit,
+// ExitCode = -1 with Result.Err set for start failures or context
+// cancellation. The Go error return is reserved for future
+// Runner-level failures and is currently always nil.
+//
 // If a check has FailFast set and exits non-zero,
 // Run stops early and returns the partial results.
 func (DefaultRunner) Run(
