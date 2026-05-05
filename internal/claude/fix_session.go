@@ -103,9 +103,24 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 		WithStdout(s.Stdout).
 		WithStderr(s.Stderr)
 
+	// claude with -p emits no progress until completion. Print a
+	// heartbeat with elapsed seconds every few seconds so the user
+	// sees the session is alive instead of staring at a blank screen.
+	out := s.Stderr
+	if out == nil {
+		out = io.Discard
+	}
+	fmt.Fprintln(out, "→ Spawning Claude session "+
+		"(non-interactive; output appears at the end)…")
 	start := time.Now()
+	heartbeatDone := make(chan struct{})
+	go heartbeat(out, start, heartbeatDone)
+
 	runErr := cmd.Run()
+	close(heartbeatDone)
 	duration := time.Since(start)
+	fmt.Fprintf(out, "← Claude session finished in %s\n",
+		duration.Round(time.Second))
 
 	res := &FixResult{
 		PerItem:  make(map[string][]string),
@@ -209,4 +224,22 @@ func CommitSubject(
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// heartbeat prints "  …running for Ns" every 10 seconds to the given
+// writer until the done channel is closed. Used by FixSession.Run to
+// give the user a sign that a long-running claude session is still
+// alive (claude in --print mode emits no output until completion).
+func heartbeat(out io.Writer, start time.Time, done <-chan struct{}) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			elapsed := time.Since(start).Round(time.Second)
+			fmt.Fprintf(out, "  …running for %s\n", elapsed)
+		}
+	}
 }
