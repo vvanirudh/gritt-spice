@@ -14,11 +14,20 @@ For each item, in order:
 4. Stage the modified files: `git add <file>...`.
 5. Commit using **`gs cc -m "<message>"`** — NOT `git commit`. The
    `gs cc` (alias of `gs commit create`) is the git-spice-aware
-   commit command and triggers the right downstream flows. Format:
+   commit command and triggers the right downstream flows.
 
+   `gs cc` accepts only ONE `-m` flag (it does NOT concatenate
+   multiple `-m` like git commit does), so for multi-line messages
+   use a single heredoc:
+
+       gs cc -m "$(cat <<'EOF'
        Address #<id>: <one-line summary>
 
+       <optional body paragraph>
+
        Addresses #<id>
+       EOF
+       )"
 
    The commit body MUST include the literal line `Addresses #<id>`
    so git-spice can link the commit back to the review item.
