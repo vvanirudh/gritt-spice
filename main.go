@@ -270,6 +270,7 @@ type mainCmd struct {
 	Abort    abortCmd    `cmd:"" help:"Abort an interrupted operation"`
 
 	Claude claudeCmd `cmd:"" group:"AI" help:"Claude AI integration commands"`
+	Run    runCmd    `cmd:"" group:"AI" help:"Run things locally"`
 
 	// Navigation
 	Up     upCmd     `cmd:"" aliases:"u" group:"Navigation" help:"Move up one branch"`
