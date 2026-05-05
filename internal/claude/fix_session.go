@@ -96,6 +96,11 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 
 	args := []string{
 		"--plugin-dir", s.PluginDir,
+		// Auto-accept edits and tool-use so the session can proceed
+		// without an interactive TTY for approval. The plugin's
+		// CLAUDE.md still constrains scope (one item per commit, no
+		// push, no unrelated file edits).
+		"--permission-mode", "acceptEdits",
 		"-p", string(prompt),
 	}
 	cmd := xec.Command(ctx, log, bin, args...).
