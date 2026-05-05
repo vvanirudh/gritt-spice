@@ -163,11 +163,17 @@ func (c *branchReviewsCmd) Run(
 	}
 	deferred = review.ReconcileDeferred(deferred, threads, viewerLogin)
 
-	// Run the pipeline: filter + classify.
-	cfg := claude.DefaultConfig()
+	// Run the pipeline: filter (always) + classify (only when --fix
+	// is set). In summary-only mode the per-item Claude call is the
+	// dominant latency, so we skip it.
+	var classifier review.Classifier
+	if c.Fix {
+		cfg := claude.DefaultConfig()
+		classifier = claudeClassifierAdapter{cfg: *cfg}
+	}
 	items, pipelineErr := review.PipelineForThreads(
 		ctx, threads, deferred, viewerLogin,
-		claudeClassifierAdapter{cfg: *cfg},
+		classifier,
 		c.Concurrency,
 	)
 	if pipelineErr != nil {

@@ -60,6 +60,30 @@ func PipelineForThreads(
 		return nil, nil
 	}
 
+	// Fast path: no classifier means "summary mode" — skip the
+	// per-item Claude call entirely and return items with empty
+	// Classifications. Saves ~N×latency seconds for N threads;
+	// callers can still print file/author/body and choose to opt
+	// into classification later by re-running with --fix.
+	if classifier == nil {
+		results := make([]ClassifiedItem, len(todo))
+		for i, t := range todo {
+			results[i] = ClassifiedItem{
+				Item: &claude.Item{
+					Kind:      "review-thread",
+					Body:      t.Body,
+					File:      t.File,
+					LineRange: t.LineRange,
+					Hunk:      t.Hunk,
+					Author:    t.Author,
+					Source:    t,
+				},
+				Classification: &claude.Classification{},
+			}
+		}
+		return results, nil
+	}
+
 	if concurrency < 1 {
 		concurrency = 1
 	}
