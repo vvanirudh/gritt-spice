@@ -65,9 +65,13 @@ func TestBuildBatchInstructions_includesMarkerHint(t *testing.T) {
 	got := review.BuildBatchInstructions(items)
 
 	assert.Contains(t, got, "Addresses #abc-42")
-	assert.Contains(t, got, "rename var")  // reviewer body
-	assert.Contains(t, got, "s/foo/bar/")  // fix plan
-	assert.Contains(t, got, "will rename") // reply draft
+	assert.Contains(t, got, "rename var") // reviewer body
+	assert.Contains(t, got, "s/foo/bar/") // fix plan
+	// Reply draft is intentionally excluded from agent instructions —
+	// it's what gs posts back, not what the agent should produce.
+	assert.NotContains(t, got, "will rename")
+	// Scope footer should be included so the agent knows to stay tight.
+	assert.Contains(t, got, "Scope and speed guidance")
 }
 
 // TestRunBatch_postsRepliesForCommittedItems verifies that RunBatch

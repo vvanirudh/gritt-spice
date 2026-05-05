@@ -56,8 +56,20 @@ func (a *fixSessionAdapter) Run(
 		Log:          a.log,
 	}
 	res, runErr := s.Run(ctx)
-	if runErr != nil && !res.Aborted {
-		return "", "", runErr
+	// Aborted (claude exited non-zero) is reported as a partial-success
+	// when commits exist: return the latest SHA alongside a wrapped
+	// error so callers can use the commit but still surface the abort.
+	// With no commits, propagate the original error verbatim.
+	if runErr != nil {
+		if res == nil || !res.Aborted || len(res.NewCommits) == 0 {
+			return "", "", runErr
+		}
+		sha = res.NewCommits[len(res.NewCommits)-1]
+		subject, _ = claude.CommitSubject(ctx, a.log, a.repoRoot, sha)
+		return sha, subject, fmt.Errorf(
+			"session aborted after %d commit(s): %w",
+			len(res.NewCommits), runErr,
+		)
 	}
 	if len(res.NewCommits) == 0 {
 		return "", "", errors.New("agent made no commits")

@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.abhg.dev/gs/internal/forge"
 	"go.abhg.dev/gs/internal/ui"
@@ -262,20 +263,69 @@ func identify(item ClassifiedItem) string {
 // buildSingleItemInstructions writes the instructions for a single-item
 // fix session. The spawned Claude reads this and commits with an
 // Addresses-# marker.
+//
+// The instructions include the diff hunk and line range from the
+// review thread so the agent doesn't have to grep/read to find the
+// reviewed code — it can jump straight to the right place. Empirically
+// this halves session time on most items.
 func buildSingleItemInstructions(item ClassifiedItem) string {
+	var b strings.Builder
+
 	id := "unknown"
 	if t, ok := item.Item.Source.(*forge.ReviewThreadItem); ok {
 		id = string(t.ID)
 	}
-	return fmt.Sprintf(
-		"# Address one review item\n\n"+
-			"## %s (#%s)\n\n"+
-			"Body:\n%s\n\n"+
-			"Fix plan:\n%s\n\n"+
-			"Commit message must include the line: Addresses #%s\n",
-		item.Item.File, id,
-		item.Item.Body,
-		item.Classification.FixPlan,
-		id,
-	)
+
+	fmt.Fprintf(&b, "# Address one review item\n\n")
+	fmt.Fprintf(&b, "## %s (#%s)\n\n", item.Item.File, id)
+
+	if item.Item.Author != "" {
+		fmt.Fprintf(&b, "**Reviewer:** %s\n", item.Item.Author)
+	}
+	if item.Item.LineRange != [2]int{0, 0} {
+		fmt.Fprintf(&b, "**Lines:** %d-%d\n",
+			item.Item.LineRange[0], item.Item.LineRange[1])
+	}
+	if item.Classification.Category != "" {
+		fmt.Fprintf(&b, "**Category:** %s\n", item.Classification.Category)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "### Comment\n\n%s\n\n", item.Item.Body)
+
+	if item.Item.Hunk != "" {
+		fmt.Fprintf(&b, "### Reviewed code (diff hunk)\n\n```\n%s\n```\n\n",
+			item.Item.Hunk)
+	}
+
+	if item.Classification.FixPlan != "" {
+		fmt.Fprintf(&b, "### Suggested fix plan\n\n%s\n\n",
+			item.Classification.FixPlan)
+	}
+
+	fmt.Fprintf(&b, "### Required commit message\n\n"+
+		"The commit body MUST include this exact line so git-spice can "+
+		"link the commit back to the review thread:\n\n"+
+		"    Addresses #%s\n\n", id)
+
+	b.WriteString(_instructionScopeFooter)
+
+	return b.String()
 }
+
+// _instructionScopeFooter is appended to every INSTRUCTIONS.md to
+// keep agent sessions tight: no full-suite tests, no unrelated
+// refactors, no auto-pushes. Reduces wall time per session.
+const _instructionScopeFooter = `### Scope and speed guidance
+
+- Touch only the file(s) referenced above. Don't refactor unrelated code.
+- For Go projects, use mcp__gopls__go_diagnostics if available (faster than
+  go build/go vet for compile checks).
+- Run only the tests for the package(s) you modified, e.g.
+  ` + "`go test ./path/to/package -run TestName`" + ` — never
+  ` + "`go test ./...`" + ` (slow).
+- Don't add new tests unless the comment explicitly asks for one.
+- Don't push. git-spice handles that after you exit.
+- Make ONE commit per item with the required Addresses-# marker.
+`
+

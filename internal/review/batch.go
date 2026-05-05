@@ -36,20 +36,36 @@ func BuildBatchInstructions(items []ClassifiedItem) string {
 		fmt.Fprintf(&b, "## %s\n\n", f)
 		for _, it := range byFile[f] {
 			id := strings.TrimPrefix(identify(it), "#")
-			fmt.Fprintf(&b,
-				"### #%s (%s)\n\n"+
-					"Reviewer says:\n> %s\n\n"+
-					"Fix plan:\n%s\n\n"+
-					"Reply (informational; gs posts it after commit): %s\n\n"+
-					"Marker: `Addresses #%s`\n\n",
-				id, it.Classification.Category,
-				it.Item.Body,
-				it.Classification.FixPlan,
-				it.Classification.ReplyDraft,
-				id,
+			fmt.Fprintf(&b, "### #%s", id)
+			if it.Classification.Category != "" {
+				fmt.Fprintf(&b, " — %s", it.Classification.Category)
+			}
+			if it.Item.Author != "" {
+				fmt.Fprintf(&b, " — %s", it.Item.Author)
+			}
+			if it.Item.LineRange != [2]int{0, 0} {
+				fmt.Fprintf(&b, " — lines %d-%d",
+					it.Item.LineRange[0], it.Item.LineRange[1])
+			}
+			b.WriteString("\n\n")
+
+			fmt.Fprintf(&b, "Reviewer says:\n> %s\n\n",
+				strings.ReplaceAll(strings.TrimSpace(it.Item.Body), "\n", "\n> "),
 			)
+			if it.Item.Hunk != "" {
+				fmt.Fprintf(&b,
+					"Reviewed code (diff hunk):\n```\n%s\n```\n\n",
+					it.Item.Hunk,
+				)
+			}
+			if it.Classification.FixPlan != "" {
+				fmt.Fprintf(&b, "Fix plan:\n%s\n\n", it.Classification.FixPlan)
+			}
+			fmt.Fprintf(&b, "Marker (commit body MUST include): `Addresses #%s`\n\n",
+				id)
 		}
 	}
+	b.WriteString(_instructionScopeFooter)
 	return b.String()
 }
 

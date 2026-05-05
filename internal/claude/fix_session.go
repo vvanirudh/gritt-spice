@@ -128,16 +128,13 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 	}
 
 	start := time.Now()
-	heartbeatDone := make(chan struct{})
-	go heartbeat(out, start, heartbeatDone)
-
 	if err := cmd.Start(); err != nil {
-		close(heartbeatDone)
 		return nil, fmt.Errorf("start claude: %w", err)
 	}
 
 	// Drain the stream-json output in a goroutine, surfacing
-	// human-readable progress as events arrive.
+	// human-readable progress (Edit/Bash/Read/etc.) as events arrive.
+	// This replaces the old heartbeat — the stream IS the heartbeat.
 	streamDone := make(chan struct{})
 	go func() {
 		defer close(streamDone)
@@ -146,7 +143,6 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 
 	runErr := cmd.Wait()
 	<-streamDone
-	close(heartbeatDone)
 	duration := time.Since(start)
 	fmt.Fprintf(out, "← Claude session finished in %s\n",
 		duration.Round(time.Second))
@@ -253,24 +249,6 @@ func CommitSubject(
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// heartbeat prints "  …running for Ns" every 10 seconds to the given
-// writer until the done channel is closed. Used by FixSession.Run to
-// give the user a sign that a long-running claude session is still
-// alive (claude in --print mode emits no output until completion).
-func heartbeat(out io.Writer, start time.Time, done <-chan struct{}) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-done:
-			return
-		case <-ticker.C:
-			elapsed := time.Since(start).Round(time.Second)
-			fmt.Fprintf(out, "  …running for %s\n", elapsed)
-		}
-	}
 }
 
 // streamEvents reads claude's stream-json output line-by-line and
