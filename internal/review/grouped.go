@@ -49,8 +49,18 @@ func PrintSummary(out io.Writer, items []ClassifiedItem) {
 			if cat == "" {
 				cat = "unclassified"
 			}
-			line := summarize(it)
-			fmt.Fprintf(out, "    [%s] %s\n", cat, line)
+			// Render with a leading "[cat] " marker on the first line
+			// and a hanging indent for wrapped continuations.
+			marker := fmt.Sprintf("    [%s] ", cat)
+			indent := strings.Repeat(" ", len(marker))
+			lines := wrapText(summarize(it), 78-len(indent))
+			for i, line := range lines {
+				if i == 0 {
+					fmt.Fprintln(out, marker+line)
+				} else {
+					fmt.Fprintln(out, indent+line)
+				}
+			}
 		}
 	}
 	fmt.Fprintln(out)
@@ -173,24 +183,56 @@ func groupByFile(items []ClassifiedItem) (map[string][]ClassifiedItem, []string)
 	return out, order
 }
 
-// summarize returns a one-line description of a classified item
-// for the printed summary table.
+// summarize returns a description of a classified item for the
+// printed summary. Returns the classifier's Summary if present,
+// otherwise the body's first paragraph (whitespace-collapsed,
+// truncated to ~3 sentences). The caller is responsible for any
+// wrapping or truncation needed for terminal display.
 func summarize(it ClassifiedItem) string {
 	if it.Classification.Summary != "" {
 		return it.Classification.Summary
 	}
-	// Fall back to first line of the body.
-	body := it.Item.Body
-	for i, r := range body {
-		if r == '\n' {
+	body := strings.TrimSpace(it.Item.Body)
+	// Collapse internal whitespace + newlines to single spaces so
+	// the wrapper has full text to break on word boundaries.
+	body = strings.Join(strings.Fields(body), " ")
+	// Cap at ~280 chars (about 3 sentences worth) — long enough to
+	// give meaningful preview, short enough to not flood a terminal
+	// when there are many threads.
+	if len(body) > 280 {
+		// Trim to last word boundary before the cap.
+		body = body[:280]
+		if i := strings.LastIndex(body, " "); i > 100 {
 			body = body[:i]
-			break
 		}
-	}
-	if len(body) > 100 {
-		body = body[:97] + "..."
+		body += "…"
 	}
 	return body
+}
+
+// wrapText word-wraps s to lines of at most width characters,
+// returning the wrapped lines without trailing newlines. Long words
+// that exceed width are kept on their own line (not split).
+func wrapText(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return nil
+	}
+	var lines []string
+	cur := words[0]
+	for _, w := range words[1:] {
+		if len(cur)+1+len(w) > width {
+			lines = append(lines, cur)
+			cur = w
+		} else {
+			cur += " " + w
+		}
+	}
+	lines = append(lines, cur)
+	return lines
 }
 
 // promptGroupAction asks the user how to handle all items in a single
