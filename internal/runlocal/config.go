@@ -2,7 +2,9 @@ package runlocal
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,13 +26,20 @@ import (
 func Load(repoRoot string) ([]Check, error) {
 	// 1. Explicit gs config takes highest precedence.
 	yamlPath := filepath.Join(repoRoot, ".gitspice", "precommit.yaml")
-	if _, err := os.Stat(yamlPath); err == nil {
+	switch _, err := os.Stat(yamlPath); {
+	case err == nil:
 		return loadFromYAML(yamlPath)
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, fmt.Errorf("stat %s: %w", yamlPath, err)
 	}
 
 	// 2. Delegate to the pre-commit framework if its config is present.
-	if _, err := os.Stat(filepath.Join(repoRoot, ".pre-commit-config.yaml")); err == nil {
+	preCommitPath := filepath.Join(repoRoot, ".pre-commit-config.yaml")
+	switch _, err := os.Stat(preCommitPath); {
+	case err == nil:
 		return preCommitChecks(), nil
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, fmt.Errorf("stat %s: %w", preCommitPath, err)
 	}
 
 	// 3. Mise auto-detect via text scan.
