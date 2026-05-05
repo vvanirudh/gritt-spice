@@ -59,9 +59,61 @@ $ gs sr        # stack restack
   until you push or pull from a remote repository.
 - Easy-to-remember shorthands for most commands.
 
+## Gritt-flavored additions
+
+This fork (`gritt-spice`) layers AI-assisted commands and PR-review
+surfacing on top of upstream git-spice. The upstream commands are
+unchanged; everything below is additive.
+
+### Claude-assisted commit messages and PR bodies
+
+| Command | What it does |
+|---|---|
+| `gs commit create --claude-summary` (alias `gs cc --claude-summary`) | Generate the commit message via Claude using the staged diff. Falls through to the standard editor flow if Claude is unavailable. |
+| `gs branch submit --claude-summary` | Generate the PR title and body via Claude using the branch's full diff against base. Skip with `--title=...` / `--body=...` for a manual override. |
+
+### Code review with Claude
+
+| Command | What it does |
+|---|---|
+| `gs claude review` | Review the changes between two refs (default: trunk → current branch) and print Claude's review to stderr. `--per-branch` reviews each branch in the stack individually then provides an overall summary. |
+
+### Local CI runner
+
+| Command | What it does |
+|---|---|
+| `gs run precommit-checks` | Run a list of locally-configured "what CI runs" commands before pushing. Reads `.gitspice/precommit.yaml` if present, then `.pre-commit-config.yaml` (delegates to `pre-commit run --all-files`), then auto-detects `mise.toml` tasks named `lint` / `test` / `build`, then falls back to hardcoded `mise run` invocations. |
+
+`--only=name1,name2` filters to a subset; `--fix` hands captured
+failure output to Claude for diagnosis. Runs each check pinned to the
+repo root regardless of where the user invokes from, so behavior
+matches CI even when run from a subdirectory.
+
+### Read-only PR review surfacing
+
+| Command | What it does |
+|---|---|
+| `gs branch reviews` | Fetch open review threads for the current branch's PR and print a per-file summary table (full reviewer body, word-wrapped). Read-only — addressing comments is the user's job. |
+| `gs branch checks` | Fetch CI check runs for the current branch's PR and print a per-check status summary (failing only by default; `--include-passing` for everything). |
+| `gs stack reviews` | Same as `gs branch reviews`, but iterates every branch in the current stack with per-branch headers. |
+| `gs stack checks` | Same as `gs branch checks`, but iterates every branch in the current stack. |
+
+Threads where the viewer's most recent reply matches `Addressed in
+<sha>` are filtered out automatically, so you don't keep seeing
+threads you've already addressed. Resolved threads are filtered by
+default (`--include-resolved` to include them). Bot comments are
+filtered to a small allowlist of AI review tools (Copilot, Claude,
+Codex, GitHub Advanced Security) by default.
+
+These commands are read-only and do not classify, address, reply, or
+make commits. They surface what exists; you decide what to do with
+your editor / IDE / claude session of choice.
+
 ## Documentation
 
-See <https://abhinav.github.io/git-spice/> for the full documentation.
+See <https://abhinav.github.io/git-spice/> for the full upstream
+documentation. Gritt additions above this line are not yet covered
+there.
 
 ## License
 
