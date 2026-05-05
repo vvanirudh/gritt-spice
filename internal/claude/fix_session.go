@@ -63,6 +63,48 @@ type FixResult struct {
 	Duration time.Duration
 }
 
+// _allowedTools is the conservative allowlist passed to claude via
+// --allowedTools. The fix session should be able to:
+//
+//   - Read source files for context (Read, Glob, Grep)
+//   - Modify existing files (Edit, MultiEdit)
+//   - Stage changes (Bash(git add:*))
+//   - Commit via the curated git-spice layer (Bash(gs:*))
+//   - Inspect via read-only git (Bash(git diff/log/show/status:*))
+//   - Verify changes locally (Bash go/mise subset)
+//
+// Notable exclusions (deliberately not allowed):
+//
+//   - Bash(git commit:*) — commits go through `gs cc` so they
+//     trigger the right git-spice flows (upstack restack, etc.).
+//   - Write — discourages creating new files; the agent should Edit
+//     existing ones unless a comment explicitly asks for a new file.
+//   - Bash(curl|wget|...) — no network tools.
+//   - Bash(rm|mv|cp|...) — no destructive filesystem ops.
+//   - WebFetch / WebSearch — no external lookups.
+//   - Bash(git push:*) — pushing is git-spice's job, not the agent's.
+//   - Bash(git rebase:*) — restacking is git-spice's job.
+//
+// Broaden this only when a real need surfaces in usage; keeping the
+// surface small reduces both blast radius and accidental scope drift.
+var _allowedTools = []string{
+	"Read",
+	"Edit",
+	"MultiEdit",
+	"Glob",
+	"Grep",
+	"Bash(gs:*)",
+	"Bash(git add:*)",
+	"Bash(git diff:*)",
+	"Bash(git log:*)",
+	"Bash(git show:*)",
+	"Bash(git status:*)",
+	"Bash(go build:*)",
+	"Bash(go test:*)",
+	"Bash(go vet:*)",
+	"Bash(mise run:*)",
+}
+
 // addressesRE matches the marker the spawned Claude session is told
 // to include in commit bodies. It accepts "addresses", "fixes", or
 // "resolves" (case-insensitive) followed by something containing an
@@ -98,11 +140,13 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 
 	args := []string{
 		"--plugin-dir", s.PluginDir,
-		// Auto-accept edits and tool-use so the session can proceed
-		// without an interactive TTY for approval. The plugin's
-		// CLAUDE.md still constrains scope (one item per commit, no
-		// push, no unrelated file edits).
-		"--permission-mode", "acceptEdits",
+		// Tight allowlist: read code, edit code, run focused
+		// git/go/mise commands. Nothing else — no curl, no rm, no
+		// network tools, no broad shell access. Anything outside
+		// this list will be blocked (and surfaced via the stream).
+		// Keep this conservative; broaden only when a specific need
+		// shows up in real usage.
+		"--allowedTools", strings.Join(_allowedTools, " "),
 		// Stream events as JSON so we can surface live progress
 		// (tool calls, text deltas) instead of waiting for a final
 		// result. --verbose is required by claude when stream-json
