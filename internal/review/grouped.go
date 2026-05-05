@@ -1,7 +1,6 @@
 package review
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -144,9 +143,7 @@ func groupByFile(items []ClassifiedItem) (map[string][]ClassifiedItem, []string)
 		out[key] = append(out[key], it)
 	}
 	// Stable, deterministic ordering: alphabetical by file.
-	slices.SortFunc(order, func(a, b string) int {
-		return cmp.Compare(a, b)
-	})
+	slices.Sort(order)
 	return out, order
 }
 

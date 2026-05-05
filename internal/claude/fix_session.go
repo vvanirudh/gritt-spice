@@ -283,10 +283,10 @@ type streamEvent struct {
 	Type    string `json:"type"`
 	Subtype string `json:"subtype,omitempty"`
 	Message *struct {
-		Role    string                 `json:"role,omitempty"`
-		Content []streamContentBlock   `json:"content,omitempty"`
-		Stop    string                 `json:"stop_reason,omitempty"`
-		Usage   map[string]any         `json:"usage,omitempty"`
+		Role    string               `json:"role,omitempty"`
+		Content []streamContentBlock `json:"content,omitempty"`
+		Stop    string               `json:"stop_reason,omitempty"`
+		Usage   map[string]any       `json:"usage,omitempty"`
 	} `json:"message,omitempty"`
 	Result string `json:"result,omitempty"`
 }

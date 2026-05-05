@@ -328,4 +328,3 @@ const _instructionScopeFooter = `### Scope and speed guidance
 - Don't push. git-spice handles that after you exit.
 - Make ONE commit per item with the required Addresses-# marker.
 `
-
