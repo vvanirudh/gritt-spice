@@ -463,6 +463,8 @@ func TestIsBot(t *testing.T) {
 		{"humanuser", false},
 		{"[bot]", true},
 		{"", false},
+		// Known non-suffixed AI review bots.
+		{"copilot-pull-request-reviewer", true},
 	}
 
 	for _, tt := range tests {
@@ -480,6 +482,8 @@ func TestStripBotSuffix(t *testing.T) {
 		{"dependabot[bot]", "dependabot"},
 		{"humanuser", "humanuser"},
 		{"[bot]", ""},
+		// Non-suffixed AI bot canonicalizes to its allowlist key.
+		{"copilot-pull-request-reviewer", "copilot"},
 	}
 
 	for _, tt := range tests {

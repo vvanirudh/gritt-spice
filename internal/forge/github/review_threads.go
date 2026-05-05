@@ -187,16 +187,40 @@ func (r *Repository) PostReviewThreadReply(
 	}, nil
 }
 
-// isBot reports whether login has a "[bot]" suffix,
-// indicating a GitHub App or bot account.
-func isBot(login string) bool {
-	return strings.HasSuffix(login, "[bot]")
+// _knownBotLogins maps GitHub login → canonical short name used for
+// BotAllowlist matching, for review bots that don't carry the "[bot]"
+// suffix and would otherwise pass the bot filter unconditionally.
+//
+// Add entries here when a new AI-review integration ships under a
+// non-suffixed login.
+var _knownBotLogins = map[string]string{
+	"copilot-pull-request-reviewer": "copilot",
 }
 
-// stripBotSuffix removes the "[bot]" suffix from a bot login.
-// It returns the login unchanged if no suffix is present.
+// isBot reports whether login is an automated account: either it has
+// a "[bot]" suffix (the GitHub App convention) or it appears in
+// _knownBotLogins (for AI review bots that don't follow that
+// convention, like Copilot's PR reviewer).
+func isBot(login string) bool {
+	if strings.HasSuffix(login, "[bot]") {
+		return true
+	}
+	_, ok := _knownBotLogins[login]
+	return ok
+}
+
+// stripBotSuffix returns the canonical short form of a bot login:
+// the "[bot]" suffix removed for App-style logins, or the configured
+// canonical name for known non-suffixed bots. Returns the login
+// unchanged when neither pattern matches.
 func stripBotSuffix(login string) string {
-	return strings.TrimSuffix(login, "[bot]")
+	if bare, ok := strings.CutSuffix(login, "[bot]"); ok {
+		return bare
+	}
+	if canonical, ok := _knownBotLogins[login]; ok {
+		return canonical
+	}
+	return login
 }
 
 // inBotAllowlist reports whether bare (already stripped of "[bot]")

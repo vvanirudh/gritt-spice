@@ -273,3 +273,32 @@ func TestForgeRepository_PostReviewThreadReply_notFound(t *testing.T) {
 	)
 	assert.Error(t, err, "should return error for unknown thread ID")
 }
+
+func TestIsBot_shamhub(t *testing.T) {
+	tests := []struct {
+		login string
+		want  bool
+	}{
+		{"copilot[bot]", true},
+		{"dependabot[bot]", true},
+		{"humanuser", false},
+		{"copilot-pull-request-reviewer", true},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, isBot(tt.login), "login=%q", tt.login)
+	}
+}
+
+func TestStripBotSuffix_shamhub(t *testing.T) {
+	tests := []struct {
+		login string
+		want  string
+	}{
+		{"copilot[bot]", "copilot"},
+		{"humanuser", "humanuser"},
+		{"copilot-pull-request-reviewer", "copilot"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, stripBotSuffix(tt.login), "login=%q", tt.login)
+	}
+}
