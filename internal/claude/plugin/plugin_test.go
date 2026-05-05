@@ -42,3 +42,25 @@ func TestExtractCodeReview_cleanup(t *testing.T) {
 	_, err = os.Stat(dir)
 	assert.True(t, os.IsNotExist(err))
 }
+
+func TestExtractPullAndAddress(t *testing.T) {
+	dir, cleanup, err := ExtractPullAndAddress()
+	require.NoError(t, err)
+	defer cleanup()
+
+	pluginJSON, err := os.ReadFile(
+		filepath.Join(dir, ".claude-plugin", "plugin.json"),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, string(pluginJSON), `"name": "pull-and-address"`)
+
+	claudeMd, err := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(claudeMd), "Addresses #")
+
+	startMd, err := os.ReadFile(
+		filepath.Join(dir, "commands", "start.md"),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, string(startMd), "INSTRUCTIONS.md")
+}
