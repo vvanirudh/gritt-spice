@@ -14,9 +14,6 @@ import (
 //go:embed all:code-review
 var _codeReviewFS embed.FS
 
-//go:embed all:pull-and-address
-var _pullAndAddressFS embed.FS
-
 // ExtractCodeReview extracts the embedded code-review plugin
 // to a temporary directory and returns the path to the plugin root.
 //
@@ -33,27 +30,6 @@ func ExtractCodeReview() (dir string, cleanup func(), err error) {
 	if err := extractFS(_codeReviewFS, "code-review", tmpDir); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("extract code-review plugin: %w", err)
-	}
-
-	return tmpDir, cleanup, nil
-}
-
-// ExtractPullAndAddress extracts the embedded pull-and-address plugin
-// to a temporary directory and returns the path to the plugin root.
-//
-// The caller must call the returned cleanup function
-// when the plugin is no longer needed.
-func ExtractPullAndAddress() (dir string, cleanup func(), err error) {
-	tmpDir, err := os.MkdirTemp("", "gs-pull-address-*")
-	if err != nil {
-		return "", nil, fmt.Errorf("create temp dir: %w", err)
-	}
-
-	cleanup = func() { _ = os.RemoveAll(tmpDir) }
-
-	if err := extractFS(_pullAndAddressFS, "pull-and-address", tmpDir); err != nil {
-		cleanup()
-		return "", nil, fmt.Errorf("extract pull-and-address plugin: %w", err)
 	}
 
 	return tmpDir, cleanup, nil

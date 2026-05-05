@@ -127,15 +127,10 @@ func (c *branchReviewsCmd) Run(
 		threads = append(threads, thread)
 	}
 
-	// Filter out already-addressed threads. No deferred-state file
-	// here — the command is read-only, there's no "defer" action to
-	// record. Pass nil deferred so PipelineForThreads only filters
-	// based on viewer's posted replies.
-	items, _ := review.PipelineForThreads(
-		ctx, threads, nil, viewerLogin,
-		nil, // no classifier — informational mode is fast by design
-		1,
-	)
+	// Filter out already-addressed threads (where our viewer login
+	// posted an "Addressed in <sha>" reply more recently than the
+	// reviewer). Read-only — no deferred-state file involved.
+	items := review.PipelineForThreads(ctx, threads, viewerLogin)
 
 	if len(items) == 0 {
 		fmt.Fprintln(view, "no open review threads")

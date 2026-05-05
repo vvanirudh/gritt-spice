@@ -1,129 +1,81 @@
+// Package review provides helpers for fetching and summarizing
+// PR review threads — used by `gs branch reviews`.
 package review
 
 import (
 	"context"
-	"sync"
+	"regexp"
+	"strings"
 
-	"go.abhg.dev/gs/internal/claude"
 	"go.abhg.dev/gs/internal/forge"
 )
 
-// ClassifiedItem pairs a classifiable Item with its Classification.
+// addressedRE permissively matches an "Addressed in <sha>" marker,
+// with or without a trailing ": <subject>".
+var addressedRE = regexp.MustCompile(`Addressed in [0-9a-f]{7,}\b`)
+
+// ClassifiedItem is the unit consumed by PrintSummary. The
+// "Classification" naming is a vestige of an earlier richer model;
+// today it just carries category/summary fields that the summary
+// printer renders verbatim. Empty values are fine.
 type ClassifiedItem struct {
-	Item           *claude.Item
-	Classification *claude.Classification
+	Item           *Item
+	Classification *Classification
 }
 
-// Classifier is the interface PipelineForThreads needs.
-// Production implementation wraps claude.ClassifyItem.
-type Classifier interface {
-	Classify(ctx context.Context, item *claude.Item) (*claude.Classification, error)
+// Item describes one review thread for display purposes.
+type Item struct {
+	File   string
+	Author string
+	Body   string
 }
 
-// PipelineForThreads filters threads (skipping deferred and
-// already-addressed) then classifies the remainder with bounded
-// concurrency. Order is preserved.
+// Classification carries optional metadata for an item. All fields
+// are optional; PrintSummary handles empty values gracefully.
+type Classification struct {
+	Category string
+	Summary  string
+}
+
+// IsAlreadyAddressed reports whether the most recent reply on the
+// thread is from viewerLogin AND matches the addressed marker.
 //
-// If the classifier returns an error for an item, that item is still
-// included in the result with Category: "unclassified" and the first
-// such error is returned alongside the results (so callers can
-// surface a warning without losing partial work).
-//
-// concurrency < 1 is treated as 1.
-func PipelineForThreads(
-	ctx context.Context,
-	threads []*forge.ReviewThreadItem,
-	deferred []forge.ReviewThreadID,
-	viewerLogin string,
-	classifier Classifier,
-	concurrency int,
-) ([]ClassifiedItem, error) {
-	// Build deferred set for O(1) lookup.
-	deferredSet := make(map[forge.ReviewThreadID]bool, len(deferred))
-	for _, id := range deferred {
-		deferredSet[id] = true
+// The check is "did WE address it" — if the reviewer replied after
+// our addressed-in marker (asking for more changes), the thread is
+// considered re-opened and this returns false.
+func IsAlreadyAddressed(thread *forge.ReviewThreadItem, viewerLogin string) bool {
+	if len(thread.Replies) == 0 {
+		return false
 	}
+	latest := &thread.Replies[len(thread.Replies)-1]
+	if !strings.EqualFold(latest.Author, viewerLogin) {
+		return false
+	}
+	return addressedRE.MatchString(latest.Body)
+}
 
-	// Filter out deferred and already-addressed threads.
-	var todo []*forge.ReviewThreadItem
+// PipelineForThreads filters the given threads down to those still
+// worth showing the user (drops already-addressed-by-viewer
+// threads), and returns them as ClassifiedItems ready for
+// PrintSummary.
+func PipelineForThreads(
+	_ context.Context,
+	threads []*forge.ReviewThreadItem,
+	viewerLogin string,
+) []ClassifiedItem {
+	var out []ClassifiedItem
 	for _, t := range threads {
-		if deferredSet[t.ID] {
-			continue
-		}
 		if IsAlreadyAddressed(t, viewerLogin) {
 			continue
 		}
-		todo = append(todo, t)
+		out = append(out, ClassifiedItem{
+			Item: &Item{
+				File:   t.File,
+				Author: t.Author,
+				Body:   t.Body,
+			},
+			Classification: &Classification{},
+		})
 	}
-
-	if len(todo) == 0 {
-		return nil, nil
-	}
-
-	// Fast path: no classifier means "summary mode" — skip the
-	// per-item Claude call entirely and return items with empty
-	// Classifications. Saves ~N×latency seconds for N threads;
-	// callers can still print file/author/body and choose to opt
-	// into classification later by re-running with --fix.
-	if classifier == nil {
-		results := make([]ClassifiedItem, len(todo))
-		for i, t := range todo {
-			results[i] = ClassifiedItem{
-				Item: &claude.Item{
-					Kind:      "review-thread",
-					Body:      t.Body,
-					File:      t.File,
-					LineRange: t.LineRange,
-					Hunk:      t.Hunk,
-					Author:    t.Author,
-					Source:    t,
-				},
-				Classification: &claude.Classification{},
-			}
-		}
-		return results, nil
-	}
-
-	if concurrency < 1 {
-		concurrency = 1
-	}
-
-	// Classify remaining threads with bounded concurrency.
-	// Pre-allocate results slice to preserve order.
-	results := make([]ClassifiedItem, len(todo))
-	sem := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-	var firstErr error
-	var errMu sync.Mutex
-
-	for i, t := range todo {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int, t *forge.ReviewThreadItem) {
-			defer wg.Done()
-			defer func() { <-sem }()
-
-			item := &claude.Item{
-				Kind:      "review-thread",
-				Body:      t.Body,
-				File:      t.File,
-				LineRange: t.LineRange,
-				Hunk:      t.Hunk,
-				Author:    t.Author,
-				Source:    t,
-			}
-			c, err := classifier.Classify(ctx, item)
-			if err != nil {
-				errMu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				errMu.Unlock()
-				c = &claude.Classification{Category: "unclassified"}
-			}
-			results[i] = ClassifiedItem{Item: item, Classification: c}
-		}(i, t)
-	}
-	wg.Wait()
-	return results, firstErr
+	return out
 }
