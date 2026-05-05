@@ -334,14 +334,14 @@ func describeToolUse(c streamContentBlock) string {
 		}
 	case "Read":
 		if path, ok := c.Input["file_path"].(string); ok {
-			return fmt.Sprintf("Read %s", path)
+			return "Read " + path
 		}
 	case "Bash":
 		if cmd, ok := c.Input["command"].(string); ok {
 			if len(cmd) > 80 {
 				cmd = cmd[:77] + "…"
 			}
-			return fmt.Sprintf("Bash: %s", cmd)
+			return "Bash: " + cmd
 		}
 	case "Glob", "Grep":
 		if pattern, ok := c.Input["pattern"].(string); ok {
