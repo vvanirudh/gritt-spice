@@ -23,12 +23,15 @@ type stackReviewsCmd struct {
 }
 
 func (*stackReviewsCmd) Help() string {
-	return `Iterates every branch in the current stack, checks out each
-in turn, and prints the per-file review-thread summary for its PR.
+	return `Iterates every branch in the current stack and prints the
+per-file review-thread summary for its PR.
 
-The original branch is restored when the command exits. Per-branch
-errors are collected and reported at the end rather than aborting
-the whole stack walk.
+This is a forge-API operation: branches are not checked out and the
+working tree is not touched, so it works with uncommitted changes and
+with branches that are checked out in other worktrees.
+
+Per-branch errors are collected and reported at the end rather than
+aborting the whole stack walk.
 
 This command is read-only; addressing comments is the user's job.
 `
@@ -45,25 +48,15 @@ func (c *stackReviewsCmd) Run(
 	forges *forge.Registry,
 	svc *spice.Service,
 ) error {
-	// Refuse on dirty working tree (we'll be checking out branches).
-	if err := ensureCleanTree(ctx, wt); err != nil {
-		return fmt.Errorf("%w; commit or stash before running stack reviews", err)
-	}
-
-	// Record current branch for restoration.
-	original, err := wt.CurrentBranch(ctx)
+	// We need the current branch to anchor the stack walk; we don't
+	// touch the working tree beyond that.
+	current, err := wt.CurrentBranch(ctx)
 	if err != nil {
 		return fmt.Errorf("get current branch: %w", err)
 	}
-	defer func() {
-		if restoreErr := wt.CheckoutBranch(ctx, original); restoreErr != nil {
-			log.Warn("Could not restore original branch",
-				"branch", original, "error", restoreErr)
-		}
-	}()
 
 	// List branches in the stack (trunk-to-tip order).
-	stack, err := svc.ListStack(ctx, original)
+	stack, err := svc.ListStack(ctx, current)
 	if err != nil {
 		return fmt.Errorf("list stack: %w", err)
 	}
@@ -75,11 +68,6 @@ func (c *stackReviewsCmd) Run(
 	var errs []branchErr
 	for _, branch := range stack {
 		if branch == store.Trunk() {
-			continue
-		}
-
-		if err := wt.CheckoutBranch(ctx, branch); err != nil {
-			errs = append(errs, branchErr{branch, err})
 			continue
 		}
 
@@ -101,44 +89,6 @@ func (c *stackReviewsCmd) Run(
 			fmt.Fprintf(view, "  %s: %v\n", be.branch, be.err)
 		}
 		return errors.New("one or more branches had errors")
-	}
-	return nil
-}
-
-// ensureCleanTree returns an error if the working tree has any local
-// state that should be committed or stashed before checking out
-// another branch: staged changes, unstaged changes, or untracked
-// files. Untracked files are included because they're easy for the
-// user to lose track of when bouncing branches and the comment
-// "uncommitted changes" implies them anyway.
-func ensureCleanTree(ctx context.Context, wt *git.Worktree) error {
-	staged, err := wt.DiffIndex(ctx, "HEAD")
-	if err != nil {
-		return fmt.Errorf("check staged changes: %w", err)
-	}
-	if len(staged) > 0 {
-		return errors.New("working tree has uncommitted changes")
-	}
-
-	var hasUnstaged bool
-	for _, err := range wt.DiffWork(ctx) {
-		if err != nil {
-			return fmt.Errorf("check unstaged changes: %w", err)
-		}
-		hasUnstaged = true
-		break
-	}
-	if hasUnstaged {
-		return errors.New("working tree has uncommitted changes")
-	}
-
-	for path, err := range wt.ListUntrackedFiles(ctx) {
-		if err != nil {
-			return fmt.Errorf("check untracked files: %w", err)
-		}
-		return fmt.Errorf(
-			"working tree has untracked files (e.g. %s)", path,
-		)
 	}
 	return nil
 }

@@ -43,18 +43,6 @@ func (w *Worktree) RootDir() string {
 	return w.rootDir
 }
 
-// GitDir returns the absolute path to the .git directory for this
-// worktree. For the main checkout this is `<root>/.git`; for an
-// auxiliary worktree it is `<main-repo>/.git/worktrees/<name>/`
-// (because in a worktree, `.git` is a file pointer, not a directory).
-//
-// Use this when you need to write per-worktree state files (e.g.
-// `.git/spice/...`) and want them to land in the correct place
-// regardless of whether the caller is in the main repo or a worktree.
-func (w *Worktree) GitDir() string {
-	return w.gitDir
-}
-
 // Repository returns the Git repository that this worktree belongs to.
 func (w *Worktree) Repository() *Repository {
 	return w.repo

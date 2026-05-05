@@ -38,6 +38,8 @@ Stack
   stack (s) restack (r)        Restack a stack
   stack (s) edit (e)           Edit the order of branches in a stack
   stack (s) delete (d)         Delete all branches in a stack
+  stack (s) reviews            Walk reviews on every PR in the stack
+  stack (s) checks             Walk failing checks on every PR in the stack
   upstack (us) submit (s)      Submit a branch and those above it
   upstack (us) restack (r)     Restack a branch and its upstack
   upstack (us) onto (o)        Move a branch onto another branch
@@ -61,6 +63,8 @@ Branch
   branch (b) restack (r)          Restack a branch
   branch (b) onto (on)            Move a branch onto another branch
   branch (b) submit (s)           Submit a branch
+  branch (b) reviews              Summarize open PR review threads
+  branch (b) checks               Summarize CI checks for the PR
 
 Commit
   commit (c) create (c)    Create a new commit
