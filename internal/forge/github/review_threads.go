@@ -58,7 +58,11 @@ func (r *Repository) ListReviewThreads(
 							ID         githubv4.ID `graphql:"id"`
 							Path       string      `graphql:"path"`
 							IsResolved bool        `graphql:"isResolved"`
-							Comments   struct {
+							// TODO(v2): paginate comments. Threads with >100
+							// comments will silently truncate replies. See
+							// internal/forge/github/comment.go for the
+							// pagination pattern.
+							Comments struct {
 								Nodes []commentNode `graphql:"nodes"`
 							} `graphql:"comments(first: 100)"`
 						} `graphql:"nodes"`
