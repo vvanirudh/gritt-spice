@@ -97,6 +97,7 @@ func (w *Walker) RunGrouped(
 					fmt.Sprintf("file %q: batch: %v", file, err))
 				continue
 			}
+			printFileResult(view, file, len(groupItems), sub)
 			s.merge(sub)
 
 		case GroupActionWalk:
@@ -115,9 +116,34 @@ func (w *Walker) RunGrouped(
 
 		case GroupActionSkip:
 			s.Skipped += len(groupItems)
+			fmt.Fprintf(view, "  → skipped all %d in %s\n",
+				len(groupItems), file)
 		}
 	}
 	return s, nil
+}
+
+// printFileResult writes a one-line per-file summary after a
+// "address all together" batch session completes.
+func printFileResult(
+	view io.Writer,
+	file string,
+	totalItems int,
+	sub WalkSummary,
+) {
+	addressed := sub.Addressed
+	skipped := sub.Skipped
+	errs := len(sub.Errors)
+	switch {
+	case errs > 0:
+		fmt.Fprintf(view, "  ✗ %s: %d/%d addressed, %d error(s)\n",
+			file, addressed, totalItems, errs)
+	case addressed == totalItems:
+		fmt.Fprintf(view, "  ✓ %s: addressed all %d\n", file, totalItems)
+	default:
+		fmt.Fprintf(view, "  ✓ %s: %d/%d addressed (%d skipped)\n",
+			file, addressed, totalItems, skipped)
+	}
 }
 
 // merge folds rhs into s. Used to accumulate per-group summaries.

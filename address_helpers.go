@@ -128,15 +128,33 @@ func printWalkSummary(
 	log *silog.Logger,
 	summary review.WalkSummary,
 ) {
-	fmt.Fprintf(w,
-		"addressed=%d replied=%d skipped=%d deferred=%d errors=%d\n",
-		summary.Addressed,
-		summary.Replied,
-		summary.Skipped,
-		summary.Deferred,
-		len(summary.Errors),
-	)
-	for _, e := range summary.Errors {
-		log.Warn("Error during walk", "detail", e)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "─── Summary ─────────────────────────────────")
+	if summary.Addressed > 0 {
+		fmt.Fprintf(w, "  ✓ %d addressed (commits + replies posted)\n",
+			summary.Addressed)
 	}
+	if summary.Replied > 0 {
+		fmt.Fprintf(w, "  ✓ %d reply-only posted\n", summary.Replied)
+	}
+	if summary.Skipped > 0 {
+		fmt.Fprintf(w, "  → %d skipped\n", summary.Skipped)
+	}
+	if summary.Deferred > 0 {
+		fmt.Fprintf(w, "  → %d deferred (will resurface next run)\n",
+			summary.Deferred)
+	}
+	if len(summary.Errors) > 0 {
+		fmt.Fprintf(w, "  ✗ %d error(s):\n", len(summary.Errors))
+		for _, e := range summary.Errors {
+			fmt.Fprintf(w, "      - %s\n", e)
+			log.Warn("Error during walk", "detail", e)
+		}
+	}
+	if summary.Addressed == 0 && summary.Replied == 0 &&
+		summary.Skipped == 0 && summary.Deferred == 0 &&
+		len(summary.Errors) == 0 {
+		fmt.Fprintln(w, "  (no actions taken)")
+	}
+	fmt.Fprintln(w, "─────────────────────────────────────────────")
 }
