@@ -1,7 +1,9 @@
 package claude
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -101,27 +103,49 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 		// CLAUDE.md still constrains scope (one item per commit, no
 		// push, no unrelated file edits).
 		"--permission-mode", "acceptEdits",
+		// Stream events as JSON so we can surface live progress
+		// (tool calls, text deltas) instead of waiting for a final
+		// result. --verbose is required by claude when stream-json
+		// is combined with --print.
+		"--output-format", "stream-json",
+		"--include-partial-messages",
+		"--verbose",
 		"-p", string(prompt),
 	}
 	cmd := xec.Command(ctx, log, bin, args...).
 		WithDir(s.RepoRoot).
-		WithStdout(s.Stdout).
 		WithStderr(s.Stderr)
 
-	// claude with -p emits no progress until completion. Print a
-	// heartbeat with elapsed seconds every few seconds so the user
-	// sees the session is alive instead of staring at a blank screen.
 	out := s.Stderr
 	if out == nil {
 		out = io.Discard
 	}
-	fmt.Fprintln(out, "→ Spawning Claude session "+
-		"(non-interactive; output appears at the end)…")
+	fmt.Fprintln(out, "→ Spawning Claude session…")
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+
 	start := time.Now()
 	heartbeatDone := make(chan struct{})
 	go heartbeat(out, start, heartbeatDone)
 
-	runErr := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		close(heartbeatDone)
+		return nil, fmt.Errorf("start claude: %w", err)
+	}
+
+	// Drain the stream-json output in a goroutine, surfacing
+	// human-readable progress as events arrive.
+	streamDone := make(chan struct{})
+	go func() {
+		defer close(streamDone)
+		streamEvents(stdout, out)
+	}()
+
+	runErr := cmd.Wait()
+	<-streamDone
 	close(heartbeatDone)
 	duration := time.Since(start)
 	fmt.Fprintf(out, "← Claude session finished in %s\n",
@@ -247,4 +271,104 @@ func heartbeat(out io.Writer, start time.Time, done <-chan struct{}) {
 			fmt.Fprintf(out, "  …running for %s\n", elapsed)
 		}
 	}
+}
+
+// streamEvents reads claude's stream-json output line-by-line and
+// prints human-readable progress lines to out. The format claude
+// emits is one JSON object per line; we extract tool-use events
+// (Edit / Bash / Read / etc.) as those are the most informative
+// signals about what the agent is doing.
+//
+// Unrecognized event types are ignored silently — claude's stream
+// schema evolves, and we don't want to spam the user with noise
+// for events that don't help them.
+func streamEvents(r io.Reader, out io.Writer) {
+	scanner := bufio.NewScanner(r)
+	// Some claude messages can be large; bump the line buffer.
+	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var ev streamEvent
+		if err := json.Unmarshal(line, &ev); err != nil {
+			continue
+		}
+		describeEvent(out, ev)
+	}
+}
+
+// streamEvent is the subset of claude's stream-json schema we care
+// about. Fields we don't need are ignored by encoding/json.
+type streamEvent struct {
+	Type    string `json:"type"`
+	Subtype string `json:"subtype,omitempty"`
+	Message *struct {
+		Role    string                 `json:"role,omitempty"`
+		Content []streamContentBlock   `json:"content,omitempty"`
+		Stop    string                 `json:"stop_reason,omitempty"`
+		Usage   map[string]any         `json:"usage,omitempty"`
+	} `json:"message,omitempty"`
+	Result string `json:"result,omitempty"`
+}
+
+type streamContentBlock struct {
+	Type  string         `json:"type"`
+	Text  string         `json:"text,omitempty"`
+	Name  string         `json:"name,omitempty"`  // tool name on tool_use
+	Input map[string]any `json:"input,omitempty"` // tool input on tool_use
+}
+
+// describeEvent writes a one-line human description of an event to
+// out, when the event is one we recognize. Most noise (hooks, init,
+// system internals) is skipped.
+func describeEvent(out io.Writer, ev streamEvent) {
+	if ev.Message == nil {
+		return
+	}
+	for _, c := range ev.Message.Content {
+		switch c.Type {
+		case "tool_use":
+			fmt.Fprintf(out, "  ▸ %s\n", describeToolUse(c))
+		case "text":
+			// Print short text snippets (skip very long ones to
+			// avoid spamming during reasoning passes).
+			t := strings.TrimSpace(c.Text)
+			if t == "" {
+				continue
+			}
+			if len(t) > 200 {
+				t = t[:197] + "…"
+			}
+			fmt.Fprintf(out, "  · %s\n", t)
+		}
+	}
+}
+
+// describeToolUse formats a tool_use block into a one-line summary,
+// e.g. "Edit branch_reviews.go" or "Bash: git commit -m \"...\"".
+func describeToolUse(c streamContentBlock) string {
+	switch c.Name {
+	case "Edit", "Write", "MultiEdit", "NotebookEdit":
+		if path, ok := c.Input["file_path"].(string); ok {
+			return fmt.Sprintf("%s %s", c.Name, path)
+		}
+	case "Read":
+		if path, ok := c.Input["file_path"].(string); ok {
+			return fmt.Sprintf("Read %s", path)
+		}
+	case "Bash":
+		if cmd, ok := c.Input["command"].(string); ok {
+			if len(cmd) > 80 {
+				cmd = cmd[:77] + "…"
+			}
+			return fmt.Sprintf("Bash: %s", cmd)
+		}
+	case "Glob", "Grep":
+		if pattern, ok := c.Input["pattern"].(string); ok {
+			return fmt.Sprintf("%s %q", c.Name, pattern)
+		}
+	}
+	return c.Name
 }
