@@ -215,9 +215,11 @@ type listReviewReplyItem struct {
 	CreatedAt time.Time `json:"createdAt,omitzero"`
 }
 
-// handleListReviewThreads handles GET /{owner}/{repo}/changes/{number}/review_threads.
-// The filter options (IncludeResolved, BotAllowlist) are sent as JSON body
-// despite this being a GET-like operation, so that the server performs filtering.
+// handleListReviewThreads handles
+// POST /{owner}/{repo}/changes/{number}/review_threads/list.
+// The route uses POST (not GET) because the filter options
+// (IncludeResolved, BotAllowlist) are sent as a JSON body, which the
+// REST handler machinery only decodes for non-GET requests.
 func (sh *ShamHub) handleListReviewThreads(
 	_ context.Context,
 	req *listReviewThreadsRequest,
@@ -289,11 +291,14 @@ type postReviewThreadReplyResponse struct {
 }
 
 // handlePostReviewThreadReply handles POST /{owner}/{repo}/review_threads/{id}/replies.
+// The lookup is scoped to the {owner}/{repo} from the request path so a
+// reply can only be posted to a thread that lives in the named repo,
+// even though shamhub thread IDs are globally unique.
 func (sh *ShamHub) handlePostReviewThreadReply(
 	_ context.Context,
 	req *postReviewThreadReplyRequest,
 ) (*postReviewThreadReplyResponse, error) {
-	threadID := req.ThreadID
+	owner, repo, threadID := req.Owner, req.Repo, req.ThreadID
 
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
@@ -301,7 +306,7 @@ func (sh *ShamHub) handlePostReviewThreadReply(
 	var found bool
 	var replyID int
 	for i, t := range sh.reviewThreads {
-		if t.ID != threadID {
+		if t.ID != threadID || t.Owner != owner || t.Repo != repo {
 			continue
 		}
 
