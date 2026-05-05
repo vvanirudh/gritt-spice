@@ -122,8 +122,5 @@ func (r *Repository) GetCheckLog(
 	_ context.Context,
 	runID forge.CheckRunID,
 ) (io.ReadCloser, error) {
-	return nil, fmt.Errorf(
-		"github: check log fetching is not yet supported (run id %q)",
-		runID,
-	)
+	return nil, fmt.Errorf("%w (run id %q)", forge.ErrCheckLogUnsupported, runID)
 }

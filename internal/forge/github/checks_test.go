@@ -300,8 +300,8 @@ func TestListChangeChecks_emptyCommits(t *testing.T) {
 	assert.Empty(t, items)
 }
 
-// TestGetCheckLog verifies that GetCheckLog returns the documented
-// "not supported" error with the run ID embedded.
+// TestGetCheckLog verifies that GetCheckLog returns the
+// forge.ErrCheckLogUnsupported sentinel with the run ID embedded.
 func TestGetCheckLog(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// This handler should never be called for GetCheckLog.
@@ -313,6 +313,6 @@ func TestGetCheckLog(t *testing.T) {
 	rc, err := repo.GetCheckLog(t.Context(), "run-id-42")
 	assert.Nil(t, rc)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet supported")
+	assert.ErrorIs(t, err, forge.ErrCheckLogUnsupported)
 	assert.Contains(t, err.Error(), "run-id-42")
 }

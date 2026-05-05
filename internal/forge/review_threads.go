@@ -4,10 +4,17 @@ package forge
 
 import (
 	"context"
+	"errors"
 	"io"
 	"iter"
 	"time"
 )
+
+// ErrCheckLogUnsupported is returned by ChangeChecksLister.GetCheckLog
+// when the forge implementation cannot fetch raw check-run logs.
+// Callers should detect this with errors.Is and degrade gracefully
+// (for example, by linking to the check URL instead of showing logs).
+var ErrCheckLogUnsupported = errors.New("check log fetching not supported by this forge")
 
 // ReviewThreadID is a unique identifier for a review thread on a change.
 type ReviewThreadID string
