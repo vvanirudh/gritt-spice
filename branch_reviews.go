@@ -14,6 +14,7 @@ import (
 	"go.abhg.dev/gs/internal/review"
 	"go.abhg.dev/gs/internal/secret"
 	"go.abhg.dev/gs/internal/silog"
+	"go.abhg.dev/gs/internal/spice"
 	"go.abhg.dev/gs/internal/spice/state"
 	"go.abhg.dev/gs/internal/ui"
 )
@@ -53,6 +54,7 @@ func (c *branchReviewsCmd) Run(
 	store *state.Store,
 	stash secret.Stash,
 	forges *forge.Registry,
+	svc *spice.Service,
 ) error {
 	// Resolve branch name.
 	if c.Branch == "" {
@@ -155,6 +157,13 @@ func (c *branchReviewsCmd) Run(
 		return nil
 	}
 
+	// Warn about base-branch discipline issues before the TUI launches.
+	if err := warnBranchDiscipline(
+		ctx, log, wt.RootDir(), svc, store, c.Branch, items,
+	); err != nil {
+		log.Warn("branch-discipline check failed; continuing", "err", err)
+	}
+
 	// Extract plugin.
 	pluginDir, cleanup, err := plugin.ExtractPullAndAddress()
 	if err != nil {
@@ -230,4 +239,96 @@ func parseCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// warnBranchDiscipline prints stderr warnings when items reference files
+// last modified on a base branch in the stack, or when a restack would
+// likely conflict on upper branches. Warnings are informational only —
+// the caller should continue regardless of the returned error.
+func warnBranchDiscipline(
+	ctx context.Context,
+	log *silog.Logger,
+	repoRoot string,
+	svc *spice.Service,
+	store *state.Store,
+	branch string,
+	items []review.ClassifiedItem,
+) error {
+	stack, err := svc.ListStack(ctx, branch)
+	if err != nil {
+		log.Warn("Could not list stack for discipline check; skipping",
+			"branch", branch, "error", err)
+		return nil
+	}
+
+	// Build the ordered list of non-trunk stack branches.
+	var stackBranches []string
+	trunk := store.Trunk()
+	for _, b := range stack {
+		if b != trunk {
+			stackBranches = append(stackBranches, b)
+		}
+	}
+	if len(stackBranches) == 0 {
+		return nil
+	}
+
+	// Determine the index of the current branch in the stack.
+	currentIdx := -1
+	for i, b := range stackBranches {
+		if b == branch {
+			currentIdx = i
+			break
+		}
+	}
+
+	// Per-item file-ownership warnings.
+	for i, item := range items {
+		if item.Classification == nil || item.Classification.FixPlan == "" {
+			continue
+		}
+		file := item.Item.File
+		if file == "" {
+			continue
+		}
+		lastBranch, err := review.FileLastBranch(
+			ctx, log, repoRoot, file, stackBranches,
+		)
+		if err != nil {
+			// Non-fatal: log and move on.
+			log.Warn("FileLastBranch check failed",
+				"file", file, "error", err)
+			continue
+		}
+		if lastBranch == "" || lastBranch == branch {
+			continue
+		}
+		fmt.Fprintf(os.Stderr,
+			"warning: item %d: file %s was last modified on base branch %q"+
+				" in this stack;\n"+
+				"  fixing here will apply only to the current PR's diff,"+
+				" not the base.\n",
+			i+1, file, lastBranch,
+		)
+	}
+
+	// Pre-flight restack warning for upper branches.
+	if currentIdx >= 0 && currentIdx < len(stackBranches)-1 {
+		upperBranches := stackBranches[currentIdx+1:]
+		conflicts, err := review.PreflightRestack(
+			ctx, log, repoRoot, branch, upperBranches,
+		)
+		if err != nil {
+			return fmt.Errorf("preflight restack: %w", err)
+		}
+		if len(conflicts) > 0 {
+			fmt.Fprintln(os.Stderr,
+				"warning: pre-flight: restack would likely conflict on:")
+			for _, b := range conflicts {
+				fmt.Fprintf(os.Stderr, "  * %s\n", b)
+			}
+		}
+	}
+
+	return nil
 }

@@ -86,7 +86,7 @@ func (c *stackReviewsCmd) Run(
 			Batch:       c.Batch,
 			Concurrency: c.Concurrency,
 		}
-		if err := cmd.Run(ctx, log, view, wt, repo, store, stash, forges); err != nil {
+		if err := cmd.Run(ctx, log, view, wt, repo, store, stash, forges, svc); err != nil {
 			errs = append(errs, branchErr{branch, err})
 		}
 	}
