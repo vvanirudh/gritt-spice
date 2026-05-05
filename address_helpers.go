@@ -101,10 +101,13 @@ func (a *batchRunnerAdapter) Run(
 		Log:          a.log,
 	}
 	res, err := s.Run(ctx)
-	if err != nil && !res.Aborted {
+	if err != nil && (res == nil || !res.Aborted) {
 		return nil, nil, err
 	}
-	return res.PerItem, res.NewCommits, nil
+	// On Aborted=true we still return any commits the session produced so
+	// RunBatch can mark partial progress, but we propagate err so the
+	// caller records the abort in summary.Errors.
+	return res.PerItem, res.NewCommits, err
 }
 
 // noopReplyPoster satisfies review.ReplyPoster for commands
