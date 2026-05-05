@@ -20,12 +20,15 @@ type stackChecksCmd struct {
 }
 
 func (*stackChecksCmd) Help() string {
-	return `Iterates every branch in the current stack, checks out each
-in turn, and prints the CI check summary for its PR.
+	return `Iterates every branch in the current stack and prints the CI
+check summary for its PR.
 
-The original branch is restored when the command exits. Per-branch
-errors are collected and reported at the end rather than aborting
-the whole stack walk.
+This is a forge-API operation: branches are not checked out and the
+working tree is not touched, so it works with uncommitted changes and
+with branches that are checked out in other worktrees.
+
+Per-branch errors are collected and reported at the end rather than
+aborting the whole stack walk.
 `
 }
 
@@ -40,22 +43,12 @@ func (c *stackChecksCmd) Run(
 	forges *forge.Registry,
 	svc *spice.Service,
 ) error {
-	if err := ensureCleanTree(ctx, wt); err != nil {
-		return fmt.Errorf("%w; commit or stash before running stack checks", err)
-	}
-
-	original, err := wt.CurrentBranch(ctx)
+	current, err := wt.CurrentBranch(ctx)
 	if err != nil {
 		return fmt.Errorf("get current branch: %w", err)
 	}
-	defer func() {
-		if restoreErr := wt.CheckoutBranch(ctx, original); restoreErr != nil {
-			log.Warn("Could not restore original branch",
-				"branch", original, "error", restoreErr)
-		}
-	}()
 
-	stack, err := svc.ListStack(ctx, original)
+	stack, err := svc.ListStack(ctx, current)
 	if err != nil {
 		return fmt.Errorf("list stack: %w", err)
 	}
@@ -67,11 +60,6 @@ func (c *stackChecksCmd) Run(
 	var errs []branchErr
 	for _, branch := range stack {
 		if branch == store.Trunk() {
-			continue
-		}
-
-		if err := wt.CheckoutBranch(ctx, branch); err != nil {
-			errs = append(errs, branchErr{branch, err})
 			continue
 		}
 

@@ -35,8 +35,8 @@ type branchCmd struct {
 
 	// Pull request management
 	Submit  branchSubmitCmd  `cmd:"" aliases:"s" help:"Submit a branch"`
-	Reviews branchReviewsCmd `cmd:"" group:"AI" help:"Walk through PR review threads with Claude AI"`
-	Checks  branchChecksCmd  `cmd:"" group:"AI" help:"Walk failing CI checks for the current PR"`
+	Reviews branchReviewsCmd `cmd:"" help:"Summarize open PR review threads"`
+	Checks  branchChecksCmd  `cmd:"" help:"Summarize CI checks for the PR"`
 }
 
 // BranchPromptConfig defines configuration for the branch tree prompt

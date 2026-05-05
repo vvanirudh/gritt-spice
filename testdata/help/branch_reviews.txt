@@ -1,0 +1,34 @@
+Usage: gs branch (b) reviews [flags]
+
+Summarize open PR review threads
+
+Fetches open review threads for the current branch's pull request and prints a
+per-file summary table.
+
+This command is read-only. It does not classify, address, or reply to any
+threads — addressing review comments is the user's job. Use the printed summary
+to decide what to work on, then open the items in your editor / IDE / claude
+session of your choice.
+
+Threads where you've already replied with the "Addressed in <sha>: <subject>"
+marker are filtered out automatically. Resolved threads are also filtered unless
+--include-resolved is set.
+
+Bot comments are filtered to a small allowlist by default (Copilot, Claude,
+Codex, GitHub Advanced Security). Override with --bot-allowlist=name1,name2
+(empty allowlist excludes all bots).
+
+Flags:
+  --branch=STRING       Branch to fetch reviews for (defaults to current)
+  --include-resolved    Include resolved threads
+  --bot-allowlist="copilot,claude,codex,github-advanced-security,copilot-pull-request-reviewer"
+                        Comma-separated bot logins to include
+
+Global Flags:
+  -h, --help                      Show help for the command
+      --version                   Print version information and quit
+  -v, --verbose                   Enable verbose output ($GIT_SPICE_VERBOSE)
+  -C, --dir=DIR                   Change to DIR before doing anything
+      --[no-]prompt               Whether to prompt for missing information
+      --restack-method="merge"    Method to use for restacking (rebase or merge)
+                                  (🔧 spice.restack.method)

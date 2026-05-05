@@ -1,0 +1,25 @@
+Usage: gs branch (b) checks [flags]
+
+Summarize CI checks for the PR
+
+Fetches CI check runs for the current branch's pull request and prints a summary
+table.
+
+By default only failing checks are shown. Use --include-passing to include
+passing and in-progress checks too.
+
+This command is read-only; fixing failing checks is the user's job.
+
+Flags:
+  --branch=STRING      Branch to fetch checks for (defaults to current)
+  --include-passing    Include passing/in_progress checks too (default: only
+                       failing)
+
+Global Flags:
+  -h, --help                      Show help for the command
+      --version                   Print version information and quit
+  -v, --verbose                   Enable verbose output ($GIT_SPICE_VERBOSE)
+  -C, --dir=DIR                   Change to DIR before doing anything
+      --[no-]prompt               Whether to prompt for missing information
+      --restack-method="merge"    Method to use for restacking (rebase or merge)
+                                  (🔧 spice.restack.method)
