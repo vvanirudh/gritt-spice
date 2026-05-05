@@ -45,22 +45,22 @@ func TestForgeRepository_ListReviewThreads(t *testing.T) {
 
 	// Seed an open thread.
 	openID, err := sh.SeedReviewThread("alice", "myrepo", changeNumber, ReviewThreadInput{
-		File:      "foo.go",
+		File:       "foo.go",
 		LineRange:  [2]int{10, 20},
-		Hunk:      "@@ -10,5 +10,5 @@",
-		Author:    "reviewer",
-		Body:      "Please refactor this",
+		Hunk:       "@@ -10,5 +10,5 @@",
+		Author:     "reviewer",
+		Body:       "Please refactor this",
 		IsResolved: false,
-		URL:       "http://example.com/thread/1",
+		URL:        "http://example.com/thread/1",
 	})
 	require.NoError(t, err)
 
 	// Seed a resolved thread.
 	_, err = sh.SeedReviewThread("alice", "myrepo", changeNumber, ReviewThreadInput{
-		File:      "bar.go",
+		File:       "bar.go",
 		LineRange:  [2]int{5, 5},
-		Author:    "reviewer",
-		Body:      "Good fix",
+		Author:     "reviewer",
+		Body:       "Good fix",
 		IsResolved: true,
 	})
 	require.NoError(t, err)
