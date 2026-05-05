@@ -19,30 +19,48 @@ import (
 	"go.abhg.dev/gs/internal/ui"
 )
 
-// branchReviewsCmd fetches review threads for a branch's PR
-// and walks through them interactively (or in batch) with Claude AI.
+// branchReviewsCmd fetches review threads for a branch's PR.
+// Without --fix, only prints a summary and exits (safe default).
+// With --fix, walks through the threads interactively (or in batch).
 type branchReviewsCmd struct {
-	Branch  string `help:"Branch to fetch reviews for (defaults to current)" predictor:"trackedBranches"`
-	Batch   bool   `help:"Run ALL items across ALL files in one Claude session"`
-	PerItem bool   `help:"Walk every item one-by-one (skips per-file grouping)"`
+	Branch string `help:"Branch to fetch reviews for (defaults to current)" predictor:"trackedBranches"`
+
+	// Mode selection — at most one of these should be set. Default
+	// (none) is equivalent to --summary: print and exit.
+	Summary bool `help:"Print a summary of open review threads and exit (default if no mode given)"`
+	Fix     bool `help:"Interactively address review threads with Claude AI"`
+
+	// --fix sub-modifiers (ignored unless --fix is set).
+	Batch   bool `help:"With --fix: run ALL items across ALL files in one Claude session"`
+	PerItem bool `help:"With --fix: walk every item one-by-one (skips per-file grouping)"`
 
 	IncludeResolved bool   `help:"Include resolved threads"`
 	BotAllowlist    string `help:"Comma-separated bot logins to include" default:"copilot,claude,codex,github-advanced-security,copilot-pull-request-reviewer"`
-	ResetDeferred   bool   `help:"Clear .git/spice/address-deferred before running"`
+	ResetDeferred   bool   `help:"With --fix: clear .git/spice/address-deferred before running"`
 	Concurrency     int    `help:"Parallel classifications" default:"4"`
 }
 
 func (*branchReviewsCmd) Help() string {
-	return `Fetches open review threads for the current branch's pull request,
-classifies them with Claude AI, and walks through them one by one.
+	return `Fetches open review threads for the current branch's pull request.
 
-For each thread, you can choose to:
+By default (or with --summary) prints a per-file summary table and
+exits without taking any action. This is the safe default: no
+classification, no agent run, no replies.
+
+With --fix, classifies each thread with Claude AI and walks through
+them. For each file you choose:
+  - address all together (one Claude session for all comments in this file)
+  - walk individually (per-comment prompts; same as --per-item flow)
+  - skip all in this file
+
+Per-item action choices (under "walk individually" or --per-item):
   - address: spawn a Claude session to make commits addressing the feedback
   - reply: post a manual reply to the thread
   - skip: move to the next thread without action
   - defer: record the thread for later (persisted across runs)
 
-Use --batch to address all threads in a single Claude session instead.
+Use --fix --batch to address ALL threads across ALL files in a single
+Claude session.
 `
 }
 
@@ -158,9 +176,17 @@ func (c *branchReviewsCmd) Run(
 		return nil
 	}
 
-	// Print a per-file summary so the user sees the landscape before
-	// being prompted. Always shown regardless of --batch / --per-item.
+	// Always print a per-file summary so the user sees the landscape.
 	review.PrintSummary(view, items)
+
+	// Default mode (or --summary): print and exit. No agent action,
+	// no classifications shown beyond what the summary includes, no
+	// replies posted.
+	if !c.Fix {
+		fmt.Fprintln(view,
+			"(use --fix to interactively address these threads with Claude)")
+		return nil
+	}
 
 	// Warn about base-branch discipline issues before the TUI launches.
 	if err := warnBranchDiscipline(
