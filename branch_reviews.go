@@ -23,10 +23,11 @@ import (
 // and walks through them interactively (or in batch) with Claude AI.
 type branchReviewsCmd struct {
 	Branch string `help:"Branch to fetch reviews for (defaults to current)" predictor:"trackedBranches"`
-	Batch  bool   `help:"Run all items in one Claude session"`
+	Batch  bool   `help:"Run ALL items across ALL files in one Claude session"`
+	PerItem bool  `help:"Walk every item one-by-one (skips per-file grouping)"`
 
 	IncludeResolved bool   `help:"Include resolved threads"`
-	BotAllowlist    string `help:"Comma-separated bot logins to include" default:"copilot,claude,codex,github-advanced-security"`
+	BotAllowlist    string `help:"Comma-separated bot logins to include" default:"copilot,claude,codex,github-advanced-security,copilot-pull-request-reviewer"`
 	ResetDeferred   bool   `help:"Clear .git/spice/address-deferred before running"`
 	Concurrency     int    `help:"Parallel classifications" default:"4"`
 }
@@ -157,6 +158,10 @@ func (c *branchReviewsCmd) Run(
 		return nil
 	}
 
+	// Print a per-file summary so the user sees the landscape before
+	// being prompted. Always shown regardless of --batch / --per-item.
+	review.PrintSummary(view, items)
+
 	// Warn about base-branch discipline issues before the TUI launches.
 	if err := warnBranchDiscipline(
 		ctx, log, wt.RootDir(), svc, store, c.Branch, items,
@@ -195,7 +200,10 @@ func (c *branchReviewsCmd) Run(
 			return fmt.Errorf("batch run: %w", err)
 		}
 	} else {
-		// Interactive mode: walk through items one by one.
+		// Interactive mode. By default, group items by file: for each
+		// file the user picks "address all together" / "walk
+		// individually" / "skip all". --per-item bypasses the
+		// grouping and goes straight to the per-item walker.
 		walker := &review.Walker{
 			Items:  items,
 			Poster: threader,
@@ -207,7 +215,24 @@ func (c *branchReviewsCmd) Run(
 				stderr:    view,
 			},
 		}
-		summary, err = walker.Run(ctx, view)
+		if c.PerItem {
+			summary, err = walker.Run(ctx, view)
+		} else {
+			batchAdapter := &batchRunnerAdapter{
+				pluginDir: pluginDir,
+				repoRoot:  repoRoot,
+				log:       log,
+				stdout:    view,
+				stderr:    view,
+			}
+			subjectLookup := func(sha string) (string, error) {
+				return claude.CommitSubject(ctx, log, repoRoot, sha)
+			}
+			instructionsPath := filepath.Join(pluginDir, "INSTRUCTIONS.md")
+			summary, err = walker.RunGrouped(
+				ctx, view, batchAdapter, subjectLookup, instructionsPath,
+			)
+		}
 		if err != nil {
 			return fmt.Errorf("interactive walk: %w", err)
 		}
