@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"syscall"
 	"time"
 )
 
@@ -20,6 +19,10 @@ type Check struct {
 
 	// Cmd is the shell command line to execute (run via sh -c).
 	Cmd string
+
+	// Dir is the working directory for the command.
+	// If empty, the parent process's working directory is used.
+	Dir string
 
 	// FailFast stops the run if this check fails.
 	FailFast bool
@@ -33,6 +36,11 @@ type Check struct {
 type Result struct {
 	// Name is the Name field of the corresponding Check.
 	Name string
+
+	// Cmd is the shell command that was executed.
+	// Mirrored from the Check so callers that only see Results
+	// (e.g. the --fix prompt) can include it in diagnostics.
+	Cmd string
 
 	// ExitCode is the process exit status. -1 if the process could
 	// not be started or was killed before exiting normally.
@@ -93,7 +101,13 @@ func (DefaultRunner) Run(
 }
 
 // runCheck executes a single check and returns its Result.
-// It returns an error only if the process could not be started.
+//
+// The error return is reserved for future use; today it is always nil
+// because all per-check failure modes are reported via Result fields:
+// non-zero ExitCode for normal exits, ExitCode = -1 with Result.Err
+// set for start failures or context cancellation. Returning the
+// failure as a Result instead of a Go error lets DefaultRunner
+// continue running subsequent checks (unless FailFast is set).
 func runCheck(
 	ctx context.Context,
 	check Check,
@@ -109,12 +123,11 @@ func runCheck(
 
 	var captured bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", check.Cmd)
-	// Use a new process group so that killing the shell
-	// also kills any child processes it spawned.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	}
+	cmd.Dir = check.Dir
+	// Platform-specific: install process-group control on Unix so we
+	// can kill child processes spawned by the shell on context cancel.
+	// Windows uses job objects and doesn't need this.
+	setProcessGroup(cmd)
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Stdout = io.MultiWriter(out, &captured)
 	cmd.Stderr = cmd.Stdout
@@ -125,6 +138,7 @@ func runCheck(
 
 	result := Result{
 		Name:     check.Name,
+		Cmd:      check.Cmd,
 		Duration: duration,
 		Output:   captured.String(),
 	}
