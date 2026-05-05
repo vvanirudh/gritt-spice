@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -81,7 +82,7 @@ func (defaultPromptRunner) Run(
 ) (string, error) {
 	c := NewClient(nil)
 	if !c.IsAvailable() {
-		return "", fmt.Errorf("claude CLI not available")
+		return "", errors.New("claude CLI not available")
 	}
 	return c.SendPromptWithModel(ctx, prompt, cfg.Models.Review)
 }
@@ -137,7 +138,7 @@ func parseClassification(resp string) (*Classification, error) {
 		return nil, err
 	}
 	if c.Category == "" {
-		return nil, fmt.Errorf("missing category")
+		return nil, errors.New("missing category")
 	}
 	return &Classification{
 		Category:        c.Category,

@@ -28,7 +28,7 @@ func ExtractCodeReview() (dir string, cleanup func(), err error) {
 		return "", nil, fmt.Errorf("create temp dir: %w", err)
 	}
 
-	cleanup = func() { os.RemoveAll(tmpDir) }
+	cleanup = func() { _ = os.RemoveAll(tmpDir) }
 
 	if err := extractFS(_codeReviewFS, "code-review", tmpDir); err != nil {
 		cleanup()
@@ -49,7 +49,7 @@ func ExtractPullAndAddress() (dir string, cleanup func(), err error) {
 		return "", nil, fmt.Errorf("create temp dir: %w", err)
 	}
 
-	cleanup = func() { os.RemoveAll(tmpDir) }
+	cleanup = func() { _ = os.RemoveAll(tmpDir) }
 
 	if err := extractFS(_pullAndAddressFS, "pull-and-address", tmpDir); err != nil {
 		cleanup()

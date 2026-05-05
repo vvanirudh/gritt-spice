@@ -277,7 +277,7 @@ func checkBody(
 			check.Name, check.Conclusion, check.Status, err, check.URL,
 		)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	data, readErr := io.ReadAll(rc)
 	if readErr != nil {

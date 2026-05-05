@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,7 @@ func (a *fixSessionAdapter) Run(
 		return "", "", runErr
 	}
 	if len(res.NewCommits) == 0 {
-		return "", "", fmt.Errorf("agent made no commits")
+		return "", "", errors.New("agent made no commits")
 	}
 	sha = res.NewCommits[len(res.NewCommits)-1]
 	subject, _ = claude.CommitSubject(ctx, a.log, a.repoRoot, sha)

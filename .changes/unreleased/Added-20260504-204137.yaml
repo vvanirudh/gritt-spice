@@ -1,0 +1,3 @@
+kind: Added
+body: 'branch reviews: Add interactive walk-through of open review-thread comments with optional Claude-driven fixes. Posts replies of the form "Addressed in <sha>: <subject>" so reviewers stay informed even after rebase. Also: stack reviews for stack-wide iteration, --batch for one-shot agent mode, and pre-flight branch-discipline warnings.'
+time: 2026-05-04T20:41:37.58959228-07:00
