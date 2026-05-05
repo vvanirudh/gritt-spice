@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -85,7 +86,19 @@ func (s *FixSession) Run(ctx context.Context) (*FixResult, error) {
 		return nil, fmt.Errorf("rev-parse HEAD: %w", err)
 	}
 
-	cmd := xec.Command(ctx, log, bin, "--add-plugin", s.PluginDir).
+	// Read the instructions file and pass its content as the prompt
+	// to claude in non-interactive (-p) mode. Without -p, claude
+	// would launch an interactive REPL and never return.
+	prompt, err := os.ReadFile(s.Instructions)
+	if err != nil {
+		return nil, fmt.Errorf("read instructions: %w", err)
+	}
+
+	args := []string{
+		"--plugin-dir", s.PluginDir,
+		"-p", string(prompt),
+	}
+	cmd := xec.Command(ctx, log, bin, args...).
 		WithDir(s.RepoRoot).
 		WithStdout(s.Stdout).
 		WithStderr(s.Stderr)

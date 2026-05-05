@@ -15,11 +15,12 @@ import (
 func TestFixSession_parsesMarkers(t *testing.T) {
 	repo := initRepo(t)
 	scriptDir := t.TempDir()
+	instructions := writeInstructions(t, scriptDir, "irrelevant")
 
-	// Fake claude: makes 3 commits.
+	// Fake claude: makes 3 commits in the repo dir (which xec sets as
+	// the subprocess cwd via WithDir(RepoRoot)).
 	// First mentions #abc, second has no marker, third mentions #def.
 	script := writeScript(t, scriptDir, "claude", `
-cd "$2"  # --add-plugin <dir> is args 1&2; repo dir is cwd
 git commit --allow-empty -q -m "fix abc
 
 Addresses #abc"
@@ -31,6 +32,8 @@ exit 0
 `)
 
 	res, err := (&claude.FixSession{
+		PluginDir:    scriptDir, // any non-empty dir; the fake doesn't read it
+		Instructions: instructions,
 		RepoRoot:     repo,
 		ClaudeBinary: script,
 		Stdout:       &bytes.Buffer{},
@@ -48,10 +51,10 @@ exit 0
 func TestFixSession_multipleMarkersPerCommit(t *testing.T) {
 	repo := initRepo(t)
 	scriptDir := t.TempDir()
+	instructions := writeInstructions(t, scriptDir, "irrelevant")
 
 	// Fake claude: one commit that mentions both #abc and #def.
 	script := writeScript(t, scriptDir, "claude", `
-cd "$2"
 git commit --allow-empty -q -m "fix two things
 
 Addresses #abc, also fixes #def"
@@ -59,6 +62,8 @@ exit 0
 `)
 
 	res, err := (&claude.FixSession{
+		PluginDir:    scriptDir,
+		Instructions: instructions,
 		RepoRoot:     repo,
 		ClaudeBinary: script,
 		Stdout:       &bytes.Buffer{},
@@ -77,10 +82,10 @@ exit 0
 func TestFixSession_aborted(t *testing.T) {
 	repo := initRepo(t)
 	scriptDir := t.TempDir()
+	instructions := writeInstructions(t, scriptDir, "irrelevant")
 
 	// Fake claude: makes one commit then exits non-zero.
 	script := writeScript(t, scriptDir, "claude", `
-cd "$2"
 git commit --allow-empty -q -m "partial fix
 
 Addresses #abc"
@@ -88,6 +93,8 @@ exit 1
 `)
 
 	res, err := (&claude.FixSession{
+		PluginDir:    scriptDir,
+		Instructions: instructions,
 		RepoRoot:     repo,
 		ClaudeBinary: script,
 		Stdout:       &bytes.Buffer{},
@@ -95,6 +102,7 @@ exit 1
 	}).Run(t.Context())
 
 	require.Error(t, err)
+	require.NotNil(t, res, "FixResult must be returned even when aborted")
 	assert.True(t, res.Aborted)
 	// Commits made before abort are still captured.
 	assert.Len(t, res.NewCommits, 1)
@@ -106,6 +114,14 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755))
+	return path
+}
+
+// writeInstructions writes an INSTRUCTIONS.md and returns its path.
+func writeInstructions(t *testing.T, dir, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, "INSTRUCTIONS.md")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
 }
 

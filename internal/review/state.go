@@ -6,7 +6,9 @@ package review
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -63,7 +65,17 @@ func LoadDeferred(path string) ([]forge.ReviewThreadID, error) {
 
 // SaveDeferred writes the deferred-thread-IDs file atomically (write
 // to .tmp then rename). Existing comments are not preserved.
+//
+// The parent directory is created if it does not already exist —
+// .git/spice/ is not guaranteed to exist on a fresh repo.
+//
+// On Windows, os.Rename will fail if the destination exists; we
+// remove the destination first so subsequent saves keep working.
 func SaveDeferred(path string, ids []forge.ReviewThreadID) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create deferred dir: %w", err)
+	}
+
 	tmp := path + ".tmp"
 	f, err := os.Create(tmp)
 	if err != nil {
@@ -83,6 +95,11 @@ func SaveDeferred(path string, ids []forge.ReviewThreadID) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
+
+	// Windows-safe rename: remove destination first if it exists.
+	// On Unix, os.Rename overwrites silently; the extra Remove is a
+	// no-op error we ignore.
+	_ = os.Remove(path)
 	return os.Rename(tmp, path)
 }
 
