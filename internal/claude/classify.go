@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Item is one classifiable thing — a review thread or a CI check.
@@ -123,6 +124,32 @@ Diff hunk for context:
 	)
 }
 
+// extractJSON pulls a JSON object out of common LLM response shapes:
+// strips markdown code fences, trims surrounding prose, and returns
+// the substring between the first "{" and the last "}". Returns the
+// input unchanged when no braces are found (so json.Unmarshal will
+// produce its own clear error).
+func extractJSON(resp string) string {
+	resp = strings.TrimSpace(resp)
+	// Strip ```json ... ``` or ``` ... ``` fences.
+	if rest, ok := strings.CutPrefix(resp, "```json"); ok {
+		resp = rest
+	} else if rest, ok := strings.CutPrefix(resp, "```"); ok {
+		resp = rest
+	}
+	resp = strings.TrimSuffix(resp, "```")
+	resp = strings.TrimSpace(resp)
+
+	// If there's still surrounding prose, take the substring from
+	// the first "{" to the last "}".
+	start := strings.Index(resp, "{")
+	end := strings.LastIndex(resp, "}")
+	if start >= 0 && end > start {
+		return resp[start : end+1]
+	}
+	return resp
+}
+
 type classificationJSON struct {
 	Category        string `json:"category"`
 	Summary         string `json:"summary"`
@@ -134,7 +161,7 @@ type classificationJSON struct {
 
 func parseClassification(resp string) (*Classification, error) {
 	var c classificationJSON
-	if err := json.Unmarshal([]byte(resp), &c); err != nil {
+	if err := json.Unmarshal([]byte(extractJSON(resp)), &c); err != nil {
 		return nil, err
 	}
 	if c.Category == "" {

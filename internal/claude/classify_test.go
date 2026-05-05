@@ -99,3 +99,40 @@ func (f *fakeRunner) Run(
 	f.calls++
 	return f.response, f.err
 }
+
+// TestClassifyItem_jsonInMarkdownFences verifies that the parser
+// strips ```json fences before unmarshalling — claude in --print
+// mode often returns JSON wrapped in code fences despite "no prose,
+// no markdown fences" in the prompt.
+func TestClassifyItem_jsonInMarkdownFences(t *testing.T) {
+	cases := map[string]string{
+		"json fence": "```json\n{\"category\":\"nit\",\"summary\":\"x\"," +
+			"\"suggested_action\":\"reply\",\"reply_draft\":\"\"," +
+			"\"fix_plan\":\"\",\"complexity\":\"trivial\"}\n```",
+		"plain fence": "```\n{\"category\":\"bug\",\"summary\":\"y\"," +
+			"\"suggested_action\":\"edit\",\"reply_draft\":\"\"," +
+			"\"fix_plan\":\"\",\"complexity\":\"small\"}\n```",
+		"prose around": "Sure, here's the classification:\n\n" +
+			"{\"category\":\"question\",\"summary\":\"z\"," +
+			"\"suggested_action\":\"reply\",\"reply_draft\":\"\"," +
+			"\"fix_plan\":\"\",\"complexity\":\"trivial\"}\n\nLet me know!",
+	}
+	wantCategory := map[string]string{
+		"json fence":   "nit",
+		"plain fence":  "bug",
+		"prose around": "question",
+	}
+
+	for name, resp := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := claude.ClassifyItemWithRunner(
+				t.Context(),
+				claude.Config{},
+				&claude.Item{Kind: "review-thread", Body: "test"},
+				&fakeRunner{response: resp},
+			)
+			require.NoError(t, err)
+			assert.Equal(t, wantCategory[name], got.Category)
+		})
+	}
+}
