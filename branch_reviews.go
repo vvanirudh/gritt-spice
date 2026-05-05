@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -216,17 +215,7 @@ func (c *branchReviewsCmd) Run(
 	}
 
 	// Print summary.
-	fmt.Fprintf(view,
-		"addressed=%d replied=%d skipped=%d deferred=%d errors=%d\n",
-		summary.Addressed,
-		summary.Replied,
-		summary.Skipped,
-		summary.Deferred,
-		len(summary.Errors),
-	)
-	for _, e := range summary.Errors {
-		log.Warn("Error during review walk", "detail", e)
-	}
+	printWalkSummary(view, log, summary)
 
 	return nil
 }
@@ -241,85 +230,4 @@ func parseCSV(s string) []string {
 		}
 	}
 	return out
-}
-
-// claudeClassifierAdapter implements review.Classifier using claude.ClassifyItem.
-type claudeClassifierAdapter struct {
-	cfg claude.Config
-}
-
-func (a claudeClassifierAdapter) Classify(
-	ctx context.Context,
-	item *claude.Item,
-) (*claude.Classification, error) {
-	return claude.ClassifyItem(ctx, a.cfg, item)
-}
-
-// fixSessionAdapter implements review.FixRunner using claude.FixSession
-// for a single item.
-type fixSessionAdapter struct {
-	pluginDir string
-	repoRoot  string
-	log       *silog.Logger
-	stdout    io.Writer
-	stderr    io.Writer
-}
-
-func (a *fixSessionAdapter) Run(
-	ctx context.Context,
-	instructions string,
-) (sha, subject string, err error) {
-	instructionsPath := filepath.Join(a.pluginDir, "INSTRUCTIONS.md")
-	if err := os.WriteFile(
-		instructionsPath, []byte(instructions), 0o644,
-	); err != nil {
-		return "", "", fmt.Errorf("write instructions: %w", err)
-	}
-
-	s := &claude.FixSession{
-		PluginDir:    a.pluginDir,
-		Instructions: instructionsPath,
-		RepoRoot:     a.repoRoot,
-		Stdout:       a.stdout,
-		Stderr:       a.stderr,
-		Log:          a.log,
-	}
-	res, runErr := s.Run(ctx)
-	if runErr != nil && !res.Aborted {
-		return "", "", runErr
-	}
-	if len(res.NewCommits) == 0 {
-		return "", "", fmt.Errorf("agent made no commits")
-	}
-	sha = res.NewCommits[len(res.NewCommits)-1]
-	subject, _ = claude.CommitSubject(ctx, a.log, a.repoRoot, sha)
-	return sha, subject, nil
-}
-
-// batchRunnerAdapter implements review.BatchRunner using claude.FixSession.
-type batchRunnerAdapter struct {
-	pluginDir string
-	repoRoot  string
-	log       *silog.Logger
-	stdout    io.Writer
-	stderr    io.Writer
-}
-
-func (a *batchRunnerAdapter) Run(
-	ctx context.Context,
-	instructionsPath string,
-) (map[string][]string, []string, error) {
-	s := &claude.FixSession{
-		PluginDir:    a.pluginDir,
-		Instructions: instructionsPath,
-		RepoRoot:     a.repoRoot,
-		Stdout:       a.stdout,
-		Stderr:       a.stderr,
-		Log:          a.log,
-	}
-	res, err := s.Run(ctx)
-	if err != nil && !res.Aborted {
-		return nil, nil, err
-	}
-	return res.PerItem, res.NewCommits, nil
 }
