@@ -185,9 +185,13 @@ func groupByFile(items []ClassifiedItem) (map[string][]ClassifiedItem, []string)
 
 // summarize returns a description of a classified item for the
 // printed summary. Returns the classifier's Summary if present,
-// otherwise the body's first paragraph (whitespace-collapsed,
-// truncated to ~3 sentences). The caller is responsible for any
-// wrapping or truncation needed for terminal display.
+// otherwise the full body (whitespace-collapsed). The caller is
+// responsible for any wrapping needed for terminal display.
+//
+// The body is intentionally NOT truncated — when the user runs the
+// summary they want to see the actual reviewer feedback, not a
+// preview. Use --fix if you want the agent's classification to
+// produce a tighter Summary instead.
 func summarize(it ClassifiedItem) string {
 	if it.Classification.Summary != "" {
 		return it.Classification.Summary
@@ -195,19 +199,7 @@ func summarize(it ClassifiedItem) string {
 	body := strings.TrimSpace(it.Item.Body)
 	// Collapse internal whitespace + newlines to single spaces so
 	// the wrapper has full text to break on word boundaries.
-	body = strings.Join(strings.Fields(body), " ")
-	// Cap at ~280 chars (about 3 sentences worth) — long enough to
-	// give meaningful preview, short enough to not flood a terminal
-	// when there are many threads.
-	if len(body) > 280 {
-		// Trim to last word boundary before the cap.
-		body = body[:280]
-		if i := strings.LastIndex(body, " "); i > 100 {
-			body = body[:i]
-		}
-		body += "…"
-	}
-	return body
+	return strings.Join(strings.Fields(body), " ")
 }
 
 // wrapText word-wraps s to lines of at most width characters,
