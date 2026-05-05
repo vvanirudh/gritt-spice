@@ -14,20 +14,23 @@ import (
 	"go.abhg.dev/gs/internal/ui"
 )
 
-// stackReviewsCmd walks review threads for every PR in the stack.
+// stackReviewsCmd prints review-thread summaries for every PR in the
+// stack. Read-only; mirrors `branch reviews` semantics across all
+// branches in the current stack.
 type stackReviewsCmd struct {
-	Batch              bool `help:"Pass through to each branch's reviews command"`
-	NoDescriptionCheck bool `help:"Skip aggregated description-accuracy check (reserved)"`
-	Concurrency        int  `help:"Parallel classifications" default:"4"`
+	IncludeResolved bool   `help:"Include resolved threads"`
+	BotAllowlist    string `help:"Comma-separated bot logins to include" default:"copilot,claude,codex,github-advanced-security,copilot-pull-request-reviewer"`
 }
 
 func (*stackReviewsCmd) Help() string {
-	return `Iterates every branch in the current stack,
-checks out each one in turn, and runs 'branch reviews' on its PR.
+	return `Iterates every branch in the current stack, checks out each
+in turn, and prints the per-file review-thread summary for its PR.
 
-The original branch is restored when the command exits.
-Per-branch errors are collected and reported at the end
-rather than aborting the whole stack walk.
+The original branch is restored when the command exits. Per-branch
+errors are collected and reported at the end rather than aborting
+the whole stack walk.
+
+This command is read-only; addressing comments is the user's job.
 `
 }
 
@@ -42,7 +45,7 @@ func (c *stackReviewsCmd) Run(
 	forges *forge.Registry,
 	svc *spice.Service,
 ) error {
-	// Refuse on dirty working tree.
+	// Refuse on dirty working tree (we'll be checking out branches).
 	if err := ensureCleanTree(ctx, wt); err != nil {
 		return fmt.Errorf("%w; commit or stash before running stack reviews", err)
 	}
@@ -65,7 +68,6 @@ func (c *stackReviewsCmd) Run(
 		return fmt.Errorf("list stack: %w", err)
 	}
 
-	// Walk each non-trunk branch.
 	type branchErr struct {
 		branch string
 		err    error
@@ -81,17 +83,17 @@ func (c *stackReviewsCmd) Run(
 			continue
 		}
 
+		fmt.Fprintf(view, "\n=== %s ===\n", branch)
 		cmd := &branchReviewsCmd{
-			Branch:      branch,
-			Batch:       c.Batch,
-			Concurrency: c.Concurrency,
+			Branch:          branch,
+			IncludeResolved: c.IncludeResolved,
+			BotAllowlist:    c.BotAllowlist,
 		}
-		if err := cmd.Run(ctx, log, view, wt, repo, store, stash, forges, svc); err != nil {
+		if err := cmd.Run(ctx, log, view, wt, repo, store, stash, forges); err != nil {
 			errs = append(errs, branchErr{branch, err})
 		}
 	}
 
-	// Report per-branch errors.
 	if len(errs) > 0 {
 		fmt.Fprintln(view, "")
 		fmt.Fprintln(view, "Errors encountered:")
@@ -103,7 +105,9 @@ func (c *stackReviewsCmd) Run(
 	return nil
 }
 
-// ensureCleanTree returns an error if the working tree has uncommitted changes.
+// ensureCleanTree returns an error if the working tree has uncommitted
+// changes (staged or unstaged). Untracked files are intentionally not
+// checked here — git checkout carries them across branches safely.
 func ensureCleanTree(ctx context.Context, wt *git.Worktree) error {
 	staged, err := wt.DiffIndex(ctx, "HEAD")
 	if err != nil {
@@ -124,6 +128,5 @@ func ensureCleanTree(ctx context.Context, wt *git.Worktree) error {
 	if hasUnstaged {
 		return errors.New("working tree has uncommitted changes")
 	}
-
 	return nil
 }
