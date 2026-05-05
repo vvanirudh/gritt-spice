@@ -8,9 +8,11 @@
 ## `gs run precommit-checks`
 
 Runs the local equivalent of CI checks before pushing.
-Useful as a pre-submit guardrail and as a building block
-for the agent-driven `gs branch reviews` / `gs branch checks`
-workflows that may invoke it via `--fix`.
+Useful as a pre-submit guardrail.
+
+(The agent-driven `gs branch reviews` / `gs branch checks` workflows
+land in a separate change and may invoke this command via `--fix`
+once they exist.)
 
 ### Configuration
 
