@@ -1,0 +1,145 @@
+// Package runlocal runs configured local commands (lint/test/build)
+// and captures their output for use by the pull-and-address fix-flow.
+package runlocal
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os/exec"
+	"syscall"
+	"time"
+)
+
+// Check is one command to execute.
+type Check struct {
+	// Name is the human-readable identifier for the check.
+	Name string
+
+	// Cmd is the shell command line to execute (run via sh -c).
+	Cmd string
+
+	// FailFast stops the run if this check fails.
+	FailFast bool
+
+	// Timeout cancels the check if it exceeds this duration.
+	// A zero value means no timeout.
+	Timeout time.Duration
+}
+
+// Result is the outcome of running a Check.
+type Result struct {
+	// Name is the Name field of the corresponding Check.
+	Name string
+
+	// ExitCode is the process exit status. -1 if the process could
+	// not be started or was killed before exiting normally.
+	ExitCode int
+
+	// Duration is wall-clock time the check took to run.
+	Duration time.Duration
+
+	// Output is the captured combined stdout+stderr of the check.
+	Output string
+
+	// Err is set when the process failed to start or was killed.
+	// A non-zero ExitCode without Err indicates a normal exit.
+	Err error
+}
+
+// Runner executes a sequence of Checks. The interface exists for
+// testability; the production type is DefaultRunner.
+type Runner interface {
+	// Run executes the checks in order. It streams combined
+	// stdout+stderr to out as each check runs and also captures
+	// the same bytes per-check into Result.Output.
+	//
+	// A non-zero ExitCode is not a Run-level error; only failures
+	// to start the process are. The caller inspects Result.ExitCode
+	// to detect check failures.
+	Run(ctx context.Context, checks []Check, out io.Writer) ([]Result, error)
+}
+
+// DefaultRunner is the production implementation of Runner.
+// It executes checks sequentially using the system shell (sh -c).
+type DefaultRunner struct{}
+
+// Run executes checks in order, streaming combined stdout+stderr to out
+// and capturing the same bytes per-check into Result.Output.
+//
+// A non-zero exit code is not a Run-level error.
+// Only process-start failures are returned as errors.
+// If a check has FailFast set and exits non-zero,
+// Run stops early and returns the partial results.
+func (DefaultRunner) Run(
+	ctx context.Context,
+	checks []Check,
+	out io.Writer,
+) ([]Result, error) {
+	var results []Result
+	for _, check := range checks {
+		result, err := runCheck(ctx, check, out)
+		if err != nil {
+			return results, err
+		}
+		results = append(results, result)
+		if check.FailFast && result.ExitCode != 0 {
+			break
+		}
+	}
+	return results, nil
+}
+
+// runCheck executes a single check and returns its Result.
+// It returns an error only if the process could not be started.
+func runCheck(
+	ctx context.Context,
+	check Check,
+	out io.Writer,
+) (Result, error) {
+	if check.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, check.Timeout)
+		defer cancel()
+	}
+
+	fmt.Fprintf(out, "▶ %s: %s\n", check.Name, check.Cmd)
+
+	var captured bytes.Buffer
+	cmd := exec.CommandContext(ctx, "sh", "-c", check.Cmd)
+	// Use a new process group so that killing the shell
+	// also kills any child processes it spawned.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = 2 * time.Second
+	cmd.Stdout = io.MultiWriter(out, &captured)
+	cmd.Stderr = cmd.Stdout
+
+	start := time.Now()
+	runErr := cmd.Run()
+	duration := time.Since(start)
+
+	result := Result{
+		Name:     check.Name,
+		Duration: duration,
+		Output:   captured.String(),
+	}
+
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			// Process could not be started or was killed
+			// without an exit code.
+			result.ExitCode = -1
+			result.Err = runErr
+		}
+	}
+
+	return result, nil
+}
