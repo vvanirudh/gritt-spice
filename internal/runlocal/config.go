@@ -14,19 +14,26 @@ import (
 // using the following precedence:
 //
 //  1. <repoRoot>/.gitspice/precommit.yaml — if present, parse and return.
-//  2. <repoRoot>/mise.toml — if it contains [tasks.lint], [tasks.test],
+//  2. <repoRoot>/.pre-commit-config.yaml — if present, return a single
+//     check that delegates to "pre-commit run --all-files".
+//  3. <repoRoot>/mise.toml — if it contains [tasks.lint], [tasks.test],
 //     or [tasks.build] headers, build a Check per matching task
 //     using "mise run <name>".
-//  3. Fallback — hardcoded checks for lint, test, and build
+//  4. Fallback — hardcoded checks for lint, test, and build
 //     via "mise run <name>".
 func Load(repoRoot string) ([]Check, error) {
-	// 1. YAML config takes highest precedence.
+	// 1. Explicit gs config takes highest precedence.
 	yamlPath := filepath.Join(repoRoot, ".gitspice", "precommit.yaml")
 	if _, err := os.Stat(yamlPath); err == nil {
 		return loadFromYAML(yamlPath)
 	}
 
-	// 2. Mise auto-detect via text scan.
+	// 2. Delegate to the pre-commit framework if its config is present.
+	if _, err := os.Stat(filepath.Join(repoRoot, ".pre-commit-config.yaml")); err == nil {
+		return preCommitChecks(), nil
+	}
+
+	// 3. Mise auto-detect via text scan.
 	miseTomlPath := filepath.Join(repoRoot, "mise.toml")
 	if data, err := os.ReadFile(miseTomlPath); err == nil {
 		if checks := miseChecks(data); len(checks) > 0 {
@@ -34,8 +41,18 @@ func Load(repoRoot string) ([]Check, error) {
 		}
 	}
 
-	// 3. Hardcoded fallback.
+	// 4. Hardcoded fallback.
 	return fallbackChecks(), nil
+}
+
+// preCommitChecks returns a single check that delegates to the
+// pre-commit framework. The framework handles per-hook orchestration,
+// reporting, and exit-code aggregation; we just invoke it.
+func preCommitChecks() []Check {
+	return []Check{{
+		Name: "pre-commit",
+		Cmd:  "pre-commit run --all-files",
+	}}
 }
 
 // yamlCheck is the on-disk representation of a check in precommit.yaml.

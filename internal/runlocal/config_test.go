@@ -128,6 +128,60 @@ func TestLoad_TimeoutParse(t *testing.T) {
 	assert.Equal(t, 30*time.Second, checks[0].Timeout)
 }
 
+func TestLoad_PreCommitFramework(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, ".pre-commit-config.yaml"),
+		[]byte("repos: []\n"),
+		0o644,
+	))
+
+	checks, err := Load(dir)
+	require.NoError(t, err)
+	require.Len(t, checks, 1)
+	assert.Equal(t, "pre-commit", checks[0].Name)
+	assert.Equal(t, "pre-commit run --all-files", checks[0].Cmd)
+}
+
+func TestLoad_GitspiceYAMLBeatsPreCommitFramework(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".gitspice"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, ".gitspice", "precommit.yaml"),
+		[]byte("checks:\n  - name: only\n    cmd: echo only\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, ".pre-commit-config.yaml"),
+		[]byte("repos: []\n"),
+		0o644,
+	))
+
+	checks, err := Load(dir)
+	require.NoError(t, err)
+	require.Len(t, checks, 1)
+	assert.Equal(t, "only", checks[0].Name)
+}
+
+func TestLoad_PreCommitFrameworkBeatsMise(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, ".pre-commit-config.yaml"),
+		[]byte("repos: []\n"),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "mise.toml"),
+		[]byte("[tasks.lint]\nrun = \"go vet\"\n"),
+		0o644,
+	))
+
+	checks, err := Load(dir)
+	require.NoError(t, err)
+	require.Len(t, checks, 1)
+	assert.Equal(t, "pre-commit", checks[0].Name)
+}
+
 func TestLoad_BadTimeout(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".gitspice"), 0o755))

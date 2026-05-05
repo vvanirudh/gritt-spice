@@ -33,7 +33,7 @@ func (cmd *runPrecommitChecksCmd) Run(
 	// Filter by name if --only is specified.
 	if cmd.Only != "" {
 		allowed := make(map[string]struct{})
-		for _, name := range strings.Split(cmd.Only, ",") {
+		for name := range strings.SplitSeq(cmd.Only, ",") {
 			allowed[strings.TrimSpace(name)] = struct{}{}
 		}
 		var filtered []runlocal.Check
