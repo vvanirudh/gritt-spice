@@ -177,3 +177,23 @@ func gitCommitBody(
 	}
 	return string(out), nil
 }
+
+// CommitSubject returns the one-line subject of the given commit SHA
+// using `git log -1 --format=%s`. It is exported so other packages
+// (e.g. internal/review) can look up commit subjects without
+// duplicating the xec logic.
+func CommitSubject(
+	ctx context.Context,
+	log *silog.Logger,
+	repo, sha string,
+) (string, error) {
+	out, err := xec.Command(
+		ctx, log, "git", "log", "-1", "--format=%s", sha,
+	).
+		WithDir(repo).
+		Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
