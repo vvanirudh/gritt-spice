@@ -80,7 +80,8 @@ type WalkSummary struct {
 }
 
 // Run prompts the user for an action per item using the given view,
-// then dispatches.
+// then dispatches. After each item, prints a one-line confirmation
+// to view so the user sees something happened.
 func (w *Walker) Run(ctx context.Context, view ui.View) (WalkSummary, error) {
 	var s WalkSummary
 	for i, item := range w.Items {
@@ -88,9 +89,43 @@ func (w *Walker) Run(ctx context.Context, view ui.View) (WalkSummary, error) {
 		if err != nil {
 			return s, err
 		}
+		before := s
 		w.applyAction(ctx, &s, item, action, replyText)
+		printActionResult(view, item, action, &before, &s)
 	}
 	return s, nil
+}
+
+// printActionResult writes a one-line confirmation of what just
+// happened for an item: "✓ posted reply on #abc" or
+// "✗ post reply on #abc: <error>".
+func printActionResult(
+	view ui.View,
+	item ClassifiedItem,
+	action AddressAction,
+	before, after *WalkSummary,
+) {
+	id := identify(item)
+	// If the new error count grew, print the most recent error.
+	if len(after.Errors) > len(before.Errors) {
+		last := after.Errors[len(after.Errors)-1]
+		fmt.Fprintf(view, "  ✗ %s\n", last)
+		return
+	}
+	switch {
+	case after.Addressed > before.Addressed:
+		fmt.Fprintf(view, "  ✓ addressed %s (commit + reply posted)\n", id)
+	case after.Replied > before.Replied:
+		fmt.Fprintf(view, "  ✓ posted reply on %s\n", id)
+	case after.Deferred > before.Deferred:
+		fmt.Fprintf(view, "  → deferred %s\n", id)
+	case after.Skipped > before.Skipped:
+		fmt.Fprintf(view, "  → skipped %s\n", id)
+	default:
+		// No counter changed and no error — only happens for
+		// no-op paths (e.g. reply on a check item). Stay quiet.
+		_ = action
+	}
 }
 
 // promptAction shows a single item and asks the user what to do.
@@ -147,17 +182,30 @@ func (w *Walker) promptAction(
 		return 0, "", fmt.Errorf("prompt action for item %d: %w", index+1, err)
 	}
 
-	if action != ActionEditReply {
+	// For ActionReply with a non-empty draft, post it as-is.
+	// For ActionReply with an EMPTY draft (typically when
+	// classification failed and we're "unclassified"), promote to
+	// ActionEditReply so the user can write the reply themselves —
+	// posting an empty body to a review thread is never useful.
+	if action == ActionReply && strings.TrimSpace(item.Classification.ReplyDraft) != "" {
+		return ActionReply, item.Classification.ReplyDraft, nil
+	}
+	if action != ActionEditReply && action != ActionReply {
 		return action, item.Classification.ReplyDraft, nil
 	}
 
-	// Edit-reply: open $EDITOR with the draft.
+	// Edit-reply (or reply-with-empty-draft): open $EDITOR.
 	body := item.Classification.ReplyDraft
 	editor := ui.NewOpenEditor(ui.Editor{}).
 		WithTitle("Edit reply").
 		WithValue(&body)
 	if err := ui.Run(view, editor); err != nil {
 		return 0, "", fmt.Errorf("edit reply for item %d: %w", index+1, err)
+	}
+	if strings.TrimSpace(body) == "" {
+		// User left the editor empty: treat as Skip rather than
+		// posting nothing.
+		return ActionSkip, "", nil
 	}
 	// After editing, treat as a Reply action.
 	return ActionReply, body, nil
