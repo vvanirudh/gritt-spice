@@ -24,25 +24,59 @@ func (cmd *runPrecommitChecksCmd) Run(
 	log *silog.Logger,
 	wt *git.Worktree,
 ) error {
+	repoRoot := wt.RootDir()
+
 	// Load configured checks from the repo root.
-	checks, err := runlocal.Load(wt.RootDir())
+	checks, err := runlocal.Load(repoRoot)
 	if err != nil {
 		return fmt.Errorf("load checks: %w", err)
 	}
 
 	// Filter by name if --only is specified.
 	if cmd.Only != "" {
-		allowed := make(map[string]struct{})
+		requested := make(map[string]struct{})
 		for name := range strings.SplitSeq(cmd.Only, ",") {
-			allowed[strings.TrimSpace(name)] = struct{}{}
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			requested[name] = struct{}{}
 		}
 		var filtered []runlocal.Check
 		for _, c := range checks {
-			if _, ok := allowed[c.Name]; ok {
+			if _, ok := requested[c.Name]; ok {
 				filtered = append(filtered, c)
+				delete(requested, c.Name)
 			}
 		}
+		if len(filtered) == 0 {
+			available := make([]string, len(checks))
+			for i, c := range checks {
+				available[i] = c.Name
+			}
+			return fmt.Errorf(
+				"no configured checks match --only=%q (available: %s)",
+				cmd.Only, strings.Join(available, ", "),
+			)
+		}
+		if len(requested) > 0 {
+			unknown := make([]string, 0, len(requested))
+			for name := range requested {
+				unknown = append(unknown, name)
+			}
+			log.Warn("Unknown check names ignored",
+				"unknown", strings.Join(unknown, ", "))
+		}
 		checks = filtered
+	}
+
+	// Pin all checks to the repo root so that running gs from a
+	// subdirectory still produces the same behaviour as running from
+	// the root (and matches what CI does).
+	for i := range checks {
+		if checks[i].Dir == "" {
+			checks[i].Dir = repoRoot
+		}
 	}
 
 	// Run all checks, streaming output to stderr.
@@ -100,6 +134,9 @@ func (cmd *runPrecommitChecksCmd) diagnoseWithClaude(
 		"Please diagnose the failures and suggest fixes.\n\n")
 	for _, r := range failed {
 		fmt.Fprintf(&sb, "## Check: %s (exit code %d)\n\n", r.Name, r.ExitCode)
+		if r.Cmd != "" {
+			fmt.Fprintf(&sb, "Command: `%s`\n\n", r.Cmd)
+		}
 		if r.Output != "" {
 			sb.WriteString("```\n")
 			sb.WriteString(r.Output)
