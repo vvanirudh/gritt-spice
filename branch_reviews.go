@@ -22,9 +22,9 @@ import (
 // branchReviewsCmd fetches review threads for a branch's PR
 // and walks through them interactively (or in batch) with Claude AI.
 type branchReviewsCmd struct {
-	Branch string `help:"Branch to fetch reviews for (defaults to current)" predictor:"trackedBranches"`
-	Batch  bool   `help:"Run ALL items across ALL files in one Claude session"`
-	PerItem bool  `help:"Walk every item one-by-one (skips per-file grouping)"`
+	Branch  string `help:"Branch to fetch reviews for (defaults to current)" predictor:"trackedBranches"`
+	Batch   bool   `help:"Run ALL items across ALL files in one Claude session"`
+	PerItem bool   `help:"Walk every item one-by-one (skips per-file grouping)"`
 
 	IncludeResolved bool   `help:"Include resolved threads"`
 	BotAllowlist    string `help:"Comma-separated bot logins to include" default:"copilot,claude,codex,github-advanced-security,copilot-pull-request-reviewer"`
