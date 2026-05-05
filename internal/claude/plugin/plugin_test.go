@@ -57,10 +57,7 @@ func TestExtractPullAndAddress(t *testing.T) {
 	claudeMd, err := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeMd), "Addresses #")
-
-	startMd, err := os.ReadFile(
-		filepath.Join(dir, "commands", "start.md"),
-	)
-	require.NoError(t, err)
-	assert.Contains(t, string(startMd), "INSTRUCTIONS.md")
+	// CLAUDE.md must tell the agent the items are in the user message
+	// (not in a separate INSTRUCTIONS.md file the agent has to find).
+	assert.Contains(t, string(claudeMd), "user message contains the items")
 }

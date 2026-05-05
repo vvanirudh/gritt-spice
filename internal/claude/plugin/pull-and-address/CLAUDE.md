@@ -1,10 +1,12 @@
 You are addressing review feedback or CI failures inside a git-spice repo.
 
-Read INSTRUCTIONS.md (in this directory) for the list of items to address.
+**Your user message contains the items to address.** Process them in
+the order given. There is no separate INSTRUCTIONS.md to read — the
+items are right there in the message.
 
 For each item, in order:
 
-1. Read the relevant file(s).
+1. Read the relevant file(s) referenced in the item.
 2. Make the minimum code change to address the item.
 3. If the project has tests for the affected area, run only those
    tests (e.g. `go test ./path/to/pkg -run TestName`). Never run
