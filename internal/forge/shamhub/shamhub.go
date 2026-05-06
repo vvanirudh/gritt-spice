@@ -34,13 +34,16 @@ type ShamHub struct {
 	apiServer *httptest.Server // API server
 	gitServer *httptest.Server // Git HTTP remote
 
-	mu       sync.RWMutex
-	changes  []shamChange  // all changes
-	users    []shamUser    // all users
-	comments []shamComment // all comments
-	repos    []shamRepo    // all repositories
+	mu            sync.RWMutex
+	changes       []shamChange       // all changes
+	users         []shamUser         // all users
+	comments      []shamComment      // all comments
+	repos         []shamRepo         // all repositories
+	reviewThreads []shamReviewThread // all review threads
+	checks        []shamCheck        // all check runs
 
-	tokens map[string]string // token -> username
+	tokens      map[string]string // token -> username
+	viewerLogin string            // login of the authenticated viewer
 }
 
 // Config configures a ShamHub server.
@@ -74,10 +77,11 @@ func New(cfg Config) (*ShamHub, error) {
 	}
 
 	sh := ShamHub{
-		log:     cfg.Log.With("module", "shamhub"),
-		gitRoot: gitRoot,
-		gitExe:  cfg.Git,
-		tokens:  make(map[string]string),
+		log:         cfg.Log.With("module", "shamhub"),
+		gitRoot:     gitRoot,
+		gitExe:      cfg.Git,
+		tokens:      make(map[string]string),
+		viewerLogin: "test-user",
 	}
 	sh.apiServer = httptest.NewServer(sh.apiHandler())
 	sh.gitServer = httptest.NewServer(&cgi.Handler{
@@ -128,6 +132,15 @@ func (sh *ShamHub) GitURL() string {
 func (sh *ShamHub) RepoURL(owner, repo string) string {
 	repo = strings.TrimSuffix(repo, ".git")
 	return sh.gitServer.URL + "/" + owner + "/" + repo + ".git"
+}
+
+// SetViewerLogin sets the login name returned by ViewerLogin for all
+// forgeRepository clients connected to this ShamHub.
+// This is a test-only helper.
+func (sh *ShamHub) SetViewerLogin(login string) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.viewerLogin = login
 }
 
 func (sh *ShamHub) repoDir(owner, repo string) string {
