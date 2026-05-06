@@ -90,13 +90,6 @@ linters:
         text: "import 'os/exec' is not allowed"
         path: ^internal/termtest/
 
-      # runlocal spawns arbitrary user commands and reports their
-      # exit codes; it needs raw os/exec for ExitError + SysProcAttr
-      # process-group control.
-      - linters: [depguard]
-        text: "import 'os/exec' is not allowed"
-        path: ^internal/runlocal/
-
 formatters:
   enable:
     - gofumpt
