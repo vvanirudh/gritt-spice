@@ -407,13 +407,13 @@ func (h *Handler) loadChangeStates(
 		return fmt.Errorf("open remote repository: %w", err)
 	}
 
-	states, err := remoteRepo.ChangesStates(ctx, changeIDs)
+	statuses, err := remoteRepo.ChangeStatuses(ctx, changeIDs)
 	if err != nil {
 		return fmt.Errorf("retrieve change states: %w", err)
 	}
 
 	for j, idx := range branchesIdx {
-		branches[idx].ChangeState = states[j]
+		branches[idx].ChangeState = statuses[j].State
 	}
 
 	return nil
