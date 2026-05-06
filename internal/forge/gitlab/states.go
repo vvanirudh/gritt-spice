@@ -6,10 +6,11 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"go.abhg.dev/gs/internal/forge"
+	"go.abhg.dev/gs/internal/git"
 )
 
-// ChangesStates retrieves the states of the given changes in bulk.
-func (r *Repository) ChangesStates(ctx context.Context, ids []forge.ChangeID) ([]forge.ChangeState, error) {
+// ChangeStatuses retrieves compact statuses for the given changes in bulk.
+func (r *Repository) ChangeStatuses(ctx context.Context, ids []forge.ChangeID) ([]forge.ChangeStatus, error) {
 	mrIDs := make([]int64, len(ids))
 	for i, id := range ids {
 		mrIDs[i] = mustMR(id).Number
@@ -33,26 +34,29 @@ func (r *Repository) ChangesStates(ctx context.Context, ids []forge.ChangeID) ([
 		mrMap[mr.IID] = mr
 	}
 
-	states := make([]forge.ChangeState, len(mrIDs))
+	statuses := make([]forge.ChangeStatus, len(mrIDs))
 	for i, id := range mrIDs {
 		mr, ok := mrMap[id]
 		if !ok {
-			// MR not returned; leave zero-value state so callers can detect it.
+			// Missing from response (deleted or inaccessible);
+			// treat as open so downstream code skips it.
+			statuses[i].State = forge.ChangeOpen
 			continue
 		}
 		switch mr.State {
 		case "opened":
-			states[i] = forge.ChangeOpen
+			statuses[i].State = forge.ChangeOpen
 		case "merged":
-			states[i] = forge.ChangeMerged
+			statuses[i].State = forge.ChangeMerged
 		case "closed":
-			states[i] = forge.ChangeClosed
+			statuses[i].State = forge.ChangeClosed
 		default:
-			states[i] = forge.ChangeOpen // default to open for unknown states
+			statuses[i].State = forge.ChangeOpen // default to open for unknown states
 		}
+		statuses[i].HeadHash = git.Hash(mr.SHA)
 	}
 
-	return states, nil
+	return statuses, nil
 }
 
 // ChangesDetails retrieves state, draft status, and review decision

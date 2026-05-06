@@ -6,10 +6,10 @@ interactions:
         proto: HTTP/1.1
         proto_major: 1
         proto_minor: 1
-        content_length: 260
+        content_length: 142
         host: api.github.com
         body: |
-            {"query":"mutation($input:CreatePullRequestInput!){createPullRequest(input: $input){pullRequest{id,number,url}}}","variables":{"input":{"repositoryId":"R_kgDOMVd0xg","baseRefName":"main","headRefName":"YnHQQ6Sw","title":"Open YnHQQ6Sw","body":"Open change"}}}
+            {"query":"query($owner:String!$repo:String!){repository(owner: $owner, name: $repo){id}}","variables":{"owner":"test-owner","repo":"test-repo"}}
         headers:
             Content-Type:
                 - application/json
@@ -21,14 +21,41 @@ interactions:
         proto_minor: 0
         content_length: -1
         uncompressed: true
-        body: '{"data":{"createPullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs64PI_i","number":49,"url":"https://github.com/abhinav/test-repo/pull/49"}}}}'
+        body: '{"data":{"repository":{"id":"R_kgDOMVd0xg"}}}'
         headers:
             Content-Type:
                 - application/json; charset=utf-8
         status: 200 OK
         code: 200
-        duration: 924.705125ms
+        duration: 286.532125ms
     - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 260
+        host: api.github.com
+        body: |
+            {"query":"mutation($input:CreatePullRequestInput!){createPullRequest(input: $input){pullRequest{id,number,url}}}","variables":{"input":{"repositoryId":"R_kgDOMVd0xg","baseRefName":"main","headRefName":"Lgwei5Q0","title":"Open Lgwei5Q0","body":"Open change"}}}
+        headers:
+            Content-Type:
+                - application/json
+        url: https://api.github.com/graphql
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"createPullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs7VxHvb","number":68,"url":"https://github.com/test-owner/test-repo/pull/68"}}}}'
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 915.464625ms
+    - id: 2
       request:
         proto: HTTP/1.1
         proto_major: 1
@@ -36,7 +63,7 @@ interactions:
         content_length: 264
         host: api.github.com
         body: |
-            {"query":"mutation($input:CreatePullRequestInput!){createPullRequest(input: $input){pullRequest{id,number,url}}}","variables":{"input":{"repositoryId":"R_kgDOMVd0xg","baseRefName":"main","headRefName":"KyTPytgT","title":"Merged KyTPytgT","body":"Merged change"}}}
+            {"query":"mutation($input:CreatePullRequestInput!){createPullRequest(input: $input){pullRequest{id,number,url}}}","variables":{"input":{"repositoryId":"R_kgDOMVd0xg","baseRefName":"main","headRefName":"oR1r89qa","title":"Merged oR1r89qa","body":"Merged change"}}}
         headers:
             Content-Type:
                 - application/json
@@ -48,40 +75,13 @@ interactions:
         proto_minor: 0
         content_length: -1
         uncompressed: true
-        body: '{"data":{"createPullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs64PI_9","number":50,"url":"https://github.com/abhinav/test-repo/pull/50"}}}}'
+        body: '{"data":{"createPullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs7VxHvy","number":69,"url":"https://github.com/test-owner/test-repo/pull/69"}}}}'
         headers:
             Content-Type:
                 - application/json; charset=utf-8
         status: 200 OK
         code: 200
-        duration: 1.801209917s
-    - id: 2
-      request:
-        proto: HTTP/1.1
-        proto_major: 1
-        proto_minor: 1
-        content_length: 164
-        host: api.github.com
-        body: |
-            {"query":"mutation($input:MergePullRequestInput!){mergePullRequest(input: $input){pullRequest{id}}}","variables":{"input":{"pullRequestId":"PR_kwDOMVd0xs64PI_9"}}}
-        headers:
-            Content-Type:
-                - application/json
-        url: https://api.github.com/graphql
-        method: POST
-      response:
-        proto: HTTP/2.0
-        proto_major: 2
-        proto_minor: 0
-        content_length: -1
-        uncompressed: true
-        body: '{"data":{"mergePullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs64PI_9"}}}}'
-        headers:
-            Content-Type:
-                - application/json; charset=utf-8
-        status: 200 OK
-        code: 200
-        duration: 1.837170292s
+        duration: 996.899875ms
     - id: 3
       request:
         proto: HTTP/1.1
@@ -90,7 +90,7 @@ interactions:
         content_length: 264
         host: api.github.com
         body: |
-            {"query":"mutation($input:CreatePullRequestInput!){createPullRequest(input: $input){pullRequest{id,number,url}}}","variables":{"input":{"repositoryId":"R_kgDOMVd0xg","baseRefName":"main","headRefName":"lnY1VKJo","title":"Closed lnY1VKJo","body":"Closed change"}}}
+            {"query":"mutation($input:CreatePullRequestInput!){createPullRequest(input: $input){pullRequest{id,number,url}}}","variables":{"input":{"repositoryId":"R_kgDOMVd0xg","baseRefName":"main","headRefName":"LHSD69GY","title":"Closed LHSD69GY","body":"Closed change"}}}
         headers:
             Content-Type:
                 - application/json
@@ -102,41 +102,14 @@ interactions:
         proto_minor: 0
         content_length: -1
         uncompressed: true
-        body: '{"data":{"createPullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs64PJBd","number":51,"url":"https://github.com/abhinav/test-repo/pull/51"}}}}'
+        body: '{"data":{"createPullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs7VxHwb","number":70,"url":"https://github.com/test-owner/test-repo/pull/70"}}}}'
         headers:
             Content-Type:
                 - application/json; charset=utf-8
         status: 200 OK
         code: 200
-        duration: 1.540294208s
+        duration: 1.544673917s
     - id: 4
-      request:
-        proto: HTTP/1.1
-        proto_major: 1
-        proto_minor: 1
-        content_length: 183
-        host: api.github.com
-        body: |
-            {"query":"mutation($input:UpdatePullRequestInput!){updatePullRequest(input: $input){pullRequest{id}}}","variables":{"input":{"pullRequestId":"PR_kwDOMVd0xs64PJBd","state":"CLOSED"}}}
-        headers:
-            Content-Type:
-                - application/json
-        url: https://api.github.com/graphql
-        method: POST
-      response:
-        proto: HTTP/2.0
-        proto_major: 2
-        proto_minor: 0
-        content_length: -1
-        uncompressed: true
-        body: '{"data":{"updatePullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs64PJBd"}}}}'
-        headers:
-            Content-Type:
-                - application/json; charset=utf-8
-        status: 200 OK
-        code: 200
-        duration: 725.733625ms
-    - id: 5
       request:
         proto: HTTP/1.1
         proto_major: 1
@@ -144,7 +117,7 @@ interactions:
         content_length: 164
         host: api.github.com
         body: |
-            {"query":"query($ids:[ID!]!){nodes(ids: $ids){... on PullRequest{state}}}","variables":{"ids":["PR_kwDOMVd0xs64PI_i","PR_kwDOMVd0xs64PI_9","PR_kwDOMVd0xs64PJBd"]}}
+            {"query":"mutation($input:MergePullRequestInput!){mergePullRequest(input: $input){pullRequest{id}}}","variables":{"input":{"pullRequestId":"PR_kwDOMVd0xs7VxHvy"}}}
         headers:
             Content-Type:
                 - application/json
@@ -156,10 +129,64 @@ interactions:
         proto_minor: 0
         content_length: -1
         uncompressed: true
-        body: '{"data":{"nodes":[{"state":"OPEN"},{"state":"MERGED"},{"state":"CLOSED"}]}}'
+        body: '{"data":{"mergePullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs7VxHvy"}}}}'
         headers:
             Content-Type:
                 - application/json; charset=utf-8
         status: 200 OK
         code: 200
-        duration: 297.663542ms
+        duration: 1.840947959s
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 183
+        host: api.github.com
+        body: |
+            {"query":"mutation($input:UpdatePullRequestInput!){updatePullRequest(input: $input){pullRequest{id}}}","variables":{"input":{"pullRequestId":"PR_kwDOMVd0xs7VxHwb","state":"CLOSED"}}}
+        headers:
+            Content-Type:
+                - application/json
+        url: https://api.github.com/graphql
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"updatePullRequest":{"pullRequest":{"id":"PR_kwDOMVd0xs7VxHwb"}}}}'
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 818.099583ms
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 175
+        host: api.github.com
+        body: |
+            {"query":"query($ids:[ID!]!){nodes(ids: $ids){... on PullRequest{state,headRefOid}}}","variables":{"ids":["PR_kwDOMVd0xs7VxHvb","PR_kwDOMVd0xs7VxHvy","PR_kwDOMVd0xs7VxHwb"]}}
+        headers:
+            Content-Type:
+                - application/json
+        url: https://api.github.com/graphql
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"nodes":[{"state":"OPEN","headRefOid":"3a0df6baa6afa3ba213d544ed1f10d3650e9497d"},{"state":"MERGED","headRefOid":"2fbdfe75f33a6b4b71e8995e13e366b7e96979d2"},{"state":"CLOSED","headRefOid":"01b3391a453432ea5483ae10f67b88d9c1d2e5ba"}]}}'
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 216.685916ms
