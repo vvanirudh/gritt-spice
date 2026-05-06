@@ -86,6 +86,9 @@ nav:
     - cli/experiments.md
     - cli/shorthand.md
     - cli/json.md
+    - cli/branch-reviews.md
+    - cli/branch-checks.md
+    - cli/run.md
   - Community: &community
     - community/index.md
     - community/faq.md
