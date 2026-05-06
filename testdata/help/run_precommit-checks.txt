@@ -1,0 +1,16 @@
+Usage: gs run precommit-checks [flags]
+
+Run configured local checks before push
+
+Flags:
+  --only=STRING    Comma-separated list of check names to run (default: all)
+  --fix            On failure, hand captured output to Claude for diagnosis
+
+Global Flags:
+  -h, --help                      Show help for the command
+      --version                   Print version information and quit
+  -v, --verbose                   Enable verbose output ($GIT_SPICE_VERBOSE)
+  -C, --dir=DIR                   Change to DIR before doing anything
+      --[no-]prompt               Whether to prompt for missing information
+      --restack-method="merge"    Method to use for restacking (rebase or merge)
+                                  (🔧 spice.restack.method)

@@ -34,7 +34,9 @@ type branchCmd struct {
 	Onto    branchOntoCmd    `cmd:"" aliases:"on" help:"Move a branch onto another branch"`
 
 	// Pull request management
-	Submit branchSubmitCmd `cmd:"" aliases:"s" help:"Submit a branch"`
+	Submit  branchSubmitCmd  `cmd:"" aliases:"s" help:"Submit a branch"`
+	Reviews branchReviewsCmd `cmd:"" help:"Summarize open PR review threads"`
+	Checks  branchChecksCmd  `cmd:"" help:"Summarize CI checks for the PR"`
 }
 
 // BranchPromptConfig defines configuration for the branch tree prompt

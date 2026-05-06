@@ -1,0 +1,29 @@
+Usage: gs stack (s) reviews [flags]
+
+Walk reviews on every PR in the stack
+
+Iterates every branch in the current stack and prints the per-file review-thread
+summary for its PR.
+
+This is a forge-API operation: branches are not checked out and the working tree
+is not touched, so it works with uncommitted changes and with branches that are
+checked out in other worktrees.
+
+Per-branch errors are collected and reported at the end rather than aborting the
+whole stack walk.
+
+This command is read-only; addressing comments is the user's job.
+
+Flags:
+  --include-resolved    Include resolved threads
+  --bot-allowlist="copilot,claude,codex,github-advanced-security,copilot-pull-request-reviewer"
+                        Comma-separated bot logins to include
+
+Global Flags:
+  -h, --help                      Show help for the command
+      --version                   Print version information and quit
+  -v, --verbose                   Enable verbose output ($GIT_SPICE_VERBOSE)
+  -C, --dir=DIR                   Change to DIR before doing anything
+      --[no-]prompt               Whether to prompt for missing information
+      --restack-method="merge"    Method to use for restacking (rebase or merge)
+                                  (🔧 spice.restack.method)

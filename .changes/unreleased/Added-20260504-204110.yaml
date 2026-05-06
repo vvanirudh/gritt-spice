@@ -1,0 +1,3 @@
+kind: Added
+body: 'branch checks: Add interactive walk-through of failing CI checks with optional Claude-driven fixes. Also: `stack checks` for stack-wide iteration and `--batch` for one-shot agent mode.'
+time: 2026-05-04T20:41:10.646838021-07:00
