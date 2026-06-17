@@ -109,6 +109,45 @@ These commands are read-only and do not classify, address, reply, or
 make commits. They surface what exists; you decide what to do with
 your editor / IDE / claude session of choice.
 
+### Stacked PR workflow notes
+
+git-spice's stacked-PR model interacts with two GitHub repo settings
+that Gritt has enabled:
+
+1. **Squash merge** — combines a PR's commits into one commit on the
+   target branch with a brand-new SHA.
+2. **Automatically delete head branches** — removes the head branch
+   on the remote after a merge.
+
+Both settings are fine for non-stacked PRs but create friction when
+an *intermediate* PR in a stack is merged: the upper PR's commits no
+longer rebase cleanly onto the new main, and its base ref is gone.
+
+**Symptom:** after merging an intermediate stacked PR (say `PR α →
+PR β`), PR β's diff on GitHub looks like duplicates / weird history,
+and its base ref appears as `<deleted>`.
+
+**Fix — the post-merge sync sequence.** Run this in the worktree
+holding the upper branch:
+
+```bash
+git fetch upstream main
+gs repo sync          # detects PR α merged; deletes the local α branch
+gs branch restack     # replays PR β's commits onto fresh main
+gs branch submit      # force-pushes β; retargets the PR's base to main
+```
+
+`gs repo sync` will also print a hint per upstack branch that needs
+restacking, e.g. `feat/X: moved upstack onto main (needs restack —
+run 'gs branch restack' to rebase, then 'gs branch submit' to update
+its PR)`.
+
+**Avoiding the issue entirely.** When a set of changes can stand
+alone (touches disjoint files), open each PR independently against
+`main` rather than stacking. Stacking is only worth the friction
+when later commits genuinely depend on earlier ones for their tests
+or symbols.
+
 ## Documentation
 
 See <https://abhinav.github.io/git-spice/> for the full upstream

@@ -301,6 +301,7 @@ func (h *Handler) DeleteBranches(ctx context.Context, req *Request) error {
 			}
 			if skipRebase {
 				log.Infof("%v: moved upstack onto %v (needs restack)", above, base)
+				log.Infof("%v: run 'gs branch restack' to rebase, then 'gs branch submit' to update its PR", above)
 			} else {
 				log.Infof("%v: moved upstack onto %v", above, base)
 			}

@@ -1,0 +1,3 @@
+kind: Changed
+body: 'repo sync: When an intermediate stacked PR is merged and upstack branches need restacking, print a follow-up hint pointing to ''gs branch restack'' and ''gs branch submit''.'
+time: 2026-05-06T15:43:49.792161571-07:00
