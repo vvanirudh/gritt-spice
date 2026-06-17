@@ -49,6 +49,33 @@ func (ec *extraConfig) WithArgs(cmd *xec.Cmd) *xec.Cmd {
 	return cmd.WithArgs(newArgs...)
 }
 
+// _readOnlyGitCmds is the set of git subcommands
+// that do not require write access to the index.
+// These commands receive GIT_OPTIONAL_LOCKS=0
+// to avoid contending with concurrent writers.
+var _readOnlyGitCmds = map[string]struct{}{
+	"cat-file":     {},
+	"config":       {},
+	"diff":         {},
+	"diff-files":   {},
+	"diff-index":   {},
+	"diff-tree":    {},
+	"for-each-ref": {},
+	"log":          {},
+	"ls-files":     {},
+	"ls-remote":    {},
+	"ls-tree":      {},
+	"merge-base":   {},
+	"merge-tree":   {},
+	"remote":       {},
+	"rev-list":     {},
+	"rev-parse":    {},
+	"show":         {},
+	"symbolic-ref": {},
+	"var":          {},
+	"worktree":     {},
+}
+
 // newGitCmd builds a new Git command with the given arguments.
 // The first argument is the Git subcommand to run.
 //
@@ -67,11 +94,19 @@ func (ec *extraConfig) WithArgs(cmd *xec.Cmd) *xec.Cmd {
 //     but it won't be duplicated in the error message.
 func newGitCmd(ctx context.Context, log *silog.Logger, exec execer, args ...string) *xec.Cmd {
 	prefix := "git"
+	var subcmd string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		prefix += " " + args[0]
+		subcmd = args[0]
+		prefix += " " + subcmd
 	}
 
-	return xec.Command(ctx, log, "git", args...).
+	cmd := xec.Command(ctx, log, "git", args...).
 		WithExecer(exec).
 		WithLogPrefix(prefix)
+
+	if _, ok := _readOnlyGitCmds[subcmd]; ok {
+		cmd.AppendEnv("GIT_OPTIONAL_LOCKS=0")
+	}
+
+	return cmd
 }
