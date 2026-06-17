@@ -16,9 +16,10 @@ import (
 type commitCreateCmd struct {
 	All           bool   `short:"a" help:"Stage all changes before committing."`
 	AllowEmpty    bool   `help:"Create a new commit even if it contains no changes."`
-	ClaudeSummary bool   `help:"Generate commit message using Claude AI."`
+	ClaudeSummary bool   `xor:"commit-message-source" help:"Generate commit message using Claude AI."`
 	Fixup         string `help:"Create a fixup commit. See also 'gs commit fixup'." placeholder:"COMMIT"`
-	Message       string `short:"m" placeholder:"MSG" help:"Use the given message as the commit message."`
+	Message       string `short:"m" xor:"commit-message-source" placeholder:"MSG" help:"Use the given message as the commit message."`
+	MessageFile   string `short:"F" xor:"commit-message-source" placeholder:"FILE" help:"Read the commit message from the given file."`
 	NoVerify      bool   `help:"Bypass pre-commit and commit-msg hooks."`
 	Signoff       bool   `config:"commit.signoff" help:"Add Signed-off-by trailer to the commit message"`
 }
@@ -31,7 +32,7 @@ func (*commitCreateCmd) Help() string {
 		followed by 'gs upstack restack'.
 
 		An editor is opened to edit the commit message.
-		Use the -m/--message option to specify the message
+		Use the -m/--message or -F/--file option to specify the message
 		without opening an editor.
 		Git hooks are run unless the --no-verify flag is given.
 
@@ -51,13 +52,12 @@ func (cmd *commitCreateCmd) Run(
 	wt *git.Worktree,
 	restackHandler RestackHandler,
 ) error {
-	// Generate commit message with Claude if requested.
+	// Resolve commit message source.
+	// --message, --file, and --claude-summary are mutually exclusive
+	// via the "commit-message-source" xor group, so at most one is set.
 	message := cmd.Message
 	template := ""
-	if cmd.ClaudeSummary && message != "" {
-		log.Warn("--claude-summary ignored because -m/--message was provided")
-	}
-	if cmd.ClaudeSummary && message == "" {
+	if cmd.ClaudeSummary {
 		result, err := cmd.generateCommitMessage(ctx, log, view, wt)
 		if err != nil {
 			if errors.Is(err, errCommitCancelled) {
@@ -74,13 +74,14 @@ func (cmd *commitCreateCmd) Run(
 	}
 
 	if err := wt.Commit(ctx, git.CommitRequest{
-		Message:    message,
-		Template:   template,
-		All:        cmd.All,
-		AllowEmpty: cmd.AllowEmpty,
-		Fixup:      cmd.Fixup,
-		NoVerify:   cmd.NoVerify,
-		Signoff:    cmd.Signoff,
+		Message:     message,
+		MessageFile: cmd.MessageFile,
+		Template:    template,
+		All:         cmd.All,
+		AllowEmpty:  cmd.AllowEmpty,
+		Fixup:       cmd.Fixup,
+		NoVerify:    cmd.NoVerify,
+		Signoff:     cmd.Signoff,
 	}); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}

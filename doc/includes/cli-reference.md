@@ -661,7 +661,7 @@ If there are no staged changes, an empty commit will be created.
 Use -a/--all to automatically stage modified and deleted files,
 just like 'git commit -a'.
 Use --no-commit to create the branch without committing.
--m/--message always implies --commit.
+-m/--message and -F/--file always imply --commit.
 
 If a branch name is not provided,
 it will be generated from the commit message.
@@ -721,6 +721,7 @@ target (A) to the specified branch:
 * `-t`, `--target=BRANCH`: Branch to create the new branch above/below
 * `-a`, `--all`: Automatically stage modified and deleted files
 * `-m`, `--message=MSG`: Commit message
+* `-F`, `--message-file=FILE`: Read the commit message from the given file.
 * `--no-verify`: Bypass pre-commit and commit-msg hooks.
 * `--signoff` ([:material-wrench:{ .middle title="spice.commit.signoff" }](/cli/config.md#spicecommitsignoff)): Add Signed-off-by trailer to the commit message
 * `--[no-]commit` ([:material-wrench:{ .middle title="spice.branchCreate.commit" }](/cli/config.md#spicebranchcreatecommit)): Commit staged changes to the new branch, or create an empty commit
@@ -824,6 +825,8 @@ would require a new name to be provided for commit 3.
 * `--at=COMMIT:NAME,...`: Commits to split the branch at.
 * `--branch=NAME`: Branch to split commits of.
 
+**Configuration**: [spice.branchCreate.prefix](/cli/config.md#spicebranchcreateprefix)
+
 ### gs branch squash
 
 ```
@@ -838,13 +841,15 @@ Squash all commits in the current branch into a single commit
 and restack upstack branches.
 
 An editor will open to edit the commit message of the squashed commit.
-Use the -m/--message flag to specify a commit message without editing.
+Use the -m/--message or -F/--file flag
+to specify a commit message without editing.
 
 **Flags**
 
 * `--no-verify`: Bypass pre-commit and commit-msg hooks.
 * `--no-edit`: Do not open an editor to edit the squashed commit message. Only applicable if --message is not used. <span class="mdx-badge"><span class="mdx-badge__icon">:material-tag:{ title="Released in version" }</span><span class="mdx-badge__text">[v0.16.0](/changelog.md#v0.16.0)</span>
 * `-m`, `--message=MSG`: Use the given message as the commit message.
+* `-F`, `--message-file=FILE`: Read the commit message from the given file.
 * `--branch=NAME`: Branch to squash. Defaults to current branch. <span class="mdx-badge"><span class="mdx-badge__icon">:material-tag:{ title="Released in version" }</span><span class="mdx-badge__text">[v0.16.0](/changelog.md#v0.16.0)</span>
 
 ### gs branch edit
@@ -1041,7 +1046,7 @@ Use this as a shortcut for 'git commit'
 followed by 'gs upstack restack'.
 
 An editor is opened to edit the commit message.
-Use the -m/--message option to specify the message
+Use the -m/--message or -F/--file option to specify the message
 without opening an editor.
 Git hooks are run unless the --no-verify flag is given.
 
@@ -1058,6 +1063,7 @@ when you want to apply changes to an older commit.
 * `--allow-empty`: Create a new commit even if it contains no changes.
 * `--fixup=COMMIT`: Create a fixup commit. See also 'gs commit fixup'.
 * `-m`, `--message=MSG`: Use the given message as the commit message.
+* `-F`, `--message-file=FILE`: Read the commit message from the given file.
 * `--no-verify`: Bypass pre-commit and commit-msg hooks.
 * `--signoff` ([:material-wrench:{ .middle title="spice.commit.signoff" }](/cli/config.md#spicecommitsignoff)): Add Signed-off-by trailer to the commit message
 
@@ -1081,8 +1087,8 @@ that are further downstack.
 
 An editor is opened to edit the commit message
 unless the --no-edit flag is given.
-Use the -m/--message option to specify the message
-on the command line.
+Use the -m/--message or -F/--file option
+to specify the message without opening an editor.
 Git hooks are run unless the --no-verify flag is given.
 
 Use the -a/--all flag to stage all changes before committing.
@@ -1096,6 +1102,7 @@ The --no-prompt flag can be used to skip this prompt in scripts.
 * `-a`, `--all`: Stage all changes before committing.
 * `--allow-empty`: Create a commit even if it contains no changes.
 * `-m`, `--message=MSG`: Use the given message as the commit message.
+* `-F`, `--message-file=FILE`: Read the commit message from the given file.
 * `--no-edit`: Don't edit the commit message
 * `--no-verify`: Bypass pre-commit and commit-msg hooks.
 * `--signoff` ([:material-wrench:{ .middle title="spice.commit.signoff" }](/cli/config.md#spicecommitsignoff)): Add Signed-off-by trailer to the commit message
@@ -1117,6 +1124,7 @@ Branches upstack are restacked as needed.
 **Flags**
 
 * `-m`, `--message=MSG`: Use the given message as the commit message.
+* `-F`, `--message-file=FILE`: Read the commit message from the given file.
 * `--no-verify`: Bypass pre-commit and commit-msg hooks.
 
 ### gs commit fixup
