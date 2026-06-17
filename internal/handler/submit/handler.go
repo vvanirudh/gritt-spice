@@ -415,17 +415,6 @@ func (h *Handler) submitBranch(
 	svc := h.Service
 	log := h.Log
 
-	// Refuse to submit if the branch is not restacked.
-	if !opts.Force {
-		if err := svc.VerifyRestacked(ctx, branchToSubmit); err != nil {
-			log.Errorf("Branch %s needs to be restacked.", branchToSubmit)
-			log.Errorf("Run the following command to fix this:")
-			log.Errorf("  gs branch restack --branch=%s", branchToSubmit)
-			log.Errorf("Or, try again with --force to submit anyway.")
-			return status, errors.New("refusing to submit outdated branch")
-		}
-	}
-
 	branch, err := svc.LookupBranch(ctx, branchToSubmit)
 	if err != nil {
 		return status, fmt.Errorf("lookup branch: %w", err)
@@ -451,24 +440,12 @@ func (h *Handler) submitBranch(
 		return status, fmt.Errorf("get remote: %w", err)
 	}
 
-	// TODO:
-	// Encapsulate (localBranch, upstreamBranch) in a struct.
-
 	// Prefer the upstream branch name stored in the data store if available.
 	// This is how we account for branches that have been renamed after submitting.
-	upstreamBranch := branch.UpstreamBranch
-	if upstreamBranch == "" {
-		// If the branch doesn't have an upstream branch name,
-		// but has been manually pushed with an upstream branch name
-		// to the same remote, use that.
-		if upstream, err := h.Repository.BranchUpstream(ctx, branchToSubmit); err == nil {
-			// origin/branch -> branch
-			if b, ok := strings.CutPrefix(upstream, remote+"/"); ok {
-				upstreamBranch = b
-				log.Infof("%v: Using upstream name '%v'", branchToSubmit, upstreamBranch)
-				log.Infof("%v: If this is incorrect, cancel this operation and run 'git branch --unset-upstream %v'.", branchToSubmit, branchToSubmit)
-			}
-		}
+	storedUpstream := branch.UpstreamBranch
+	upstreamBranch, err := h.resolveUpstreamBranch(ctx, remote, branchToSubmit, storedUpstream)
+	if err != nil {
+		return status, fmt.Errorf("resolve upstream branch: %w", err)
 	}
 
 	// Determine the upstream base branch.
@@ -615,6 +592,16 @@ func (h *Handler) submitBranch(
 			}
 
 			log.Infof("%v: Ignoring CR %v as it was %s: %v", branchToSubmit, change.ID, state, change.URL)
+			// A closed CR means the previously recorded upstream branch name
+			// may no longer reflect the user's intent for a replacement CR.
+			// Re-read the branch's current upstream configuration and prefer it
+			// over the stored upstream branch name for the new submission.
+			upstreamBranch, err = h.resolveUpstreamBranch(ctx, remote, branchToSubmit, "")
+			if err != nil {
+				upstreamBranch = cmp.Or(storedUpstream, branchToSubmit)
+			} else if upstreamBranch == "" {
+				upstreamBranch = branchToSubmit
+			}
 			// TODO:
 			// We could offer to reopen the CR if it was closed,
 			// but not if it was merged.
@@ -657,7 +644,20 @@ func (h *Handler) submitBranch(
 			}
 			return status, nil
 		}
+	}
 
+	// Refuse to submit if the branch is not restacked.
+	if !opts.Force {
+		if err := svc.VerifyRestacked(ctx, branchToSubmit); err != nil {
+			log.Errorf("Branch %s needs to be restacked.", branchToSubmit)
+			log.Errorf("Run the following command to fix this:")
+			log.Errorf("  gs branch restack --branch=%s", branchToSubmit)
+			log.Errorf("Or, try again with --force to submit anyway.")
+			return status, errors.New("refusing to submit outdated branch")
+		}
+	}
+
+	if existingChange == nil {
 		if opts.DryRun {
 			if opts.Publish {
 				log.Infof("WOULD create a CR for %s", branchToSubmit)
@@ -1015,6 +1015,46 @@ func rejectNonFastForwardPush(log *silog.Logger, upstreamBranch string, restackM
 	}
 	log.Errorf("If you still want to overwrite the remote branch, run again with --force.")
 	return errors.New("refusing non-fast-forward push without --force")
+}
+
+// resolveUpstreamBranch determines the effective upstream branch name to use
+// for submission.
+//
+// Precedence order:
+//  1. A stored upstream branch name recorded in git-spice state.
+//  2. The current Git upstream branch, if it points to the selected remote.
+//  3. No upstream branch name.
+func (h *Handler) resolveUpstreamBranch(
+	ctx context.Context,
+	remote string,
+	branch string,
+	storedUpstream string,
+) (string, error) {
+	// Stored upstream branch state wins because it reflects the branch name
+	// previously used for submission, even if the local branch was renamed.
+	if storedUpstream != "" {
+		return storedUpstream, nil
+	}
+
+	// Otherwise, fall back to the branch's current Git upstream, but only
+	// if it points at the remote we are submitting to.
+	upstream, err := h.Repository.BranchUpstream(ctx, branch)
+	if err != nil {
+		if errors.Is(err, git.ErrNotExist) {
+			// No upstream configured.
+			return "", nil
+		}
+		return "", err
+	}
+
+	if b, ok := strings.CutPrefix(upstream, remote+"/"); ok {
+		h.Log.Infof("%v: Using upstream name '%v'", branch, b)
+		h.Log.Infof("%v: If this is incorrect, cancel this operation and run 'git branch --unset-upstream %v'.", branch, branch)
+		return b, nil
+	}
+
+	// Ignore upstreams that point to a different remote.
+	return "", nil
 }
 
 func (h *Handler) prepareBranch(
