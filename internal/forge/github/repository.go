@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/shurcooL/githubv4"
 	"go.abhg.dev/gs/internal/forge"
@@ -15,10 +16,41 @@ type Repository struct {
 	repoID      githubv4.ID
 	log         *silog.Logger
 	client      *githubv4.Client
-	forge       *Forge
+
+	// httpClient and apiURL are used for REST API calls.
+	// They are optional: if nil, REST-backed operations
+	// (such as Copilot review requests) fall back to no-ops
+	// or return errors.
+	httpClient *http.Client
+	apiURL     string
+
+	forge *Forge
 }
 
 var _ forge.Repository = (*Repository)(nil)
+
+// repositoryOptions configures optional fields on a Repository.
+type repositoryOptions struct {
+	// HTTPClient is the HTTP client used for REST API calls (separate
+	// from the GraphQL v4 client). It MUST be pre-authenticated with a
+	// bearer token — e.g., wrapped via golang.org/x/oauth2 — because
+	// setRESTHeaders does NOT add an Authorization header. Passing a
+	// plain *http.Client will cause all REST calls to fail with 401.
+	//
+	// If nil, REST-backed operations (such as Copilot review requests)
+	// are unavailable and return errors.
+	HTTPClient *http.Client
+
+	// APIURL is the base URL for GitHub API calls. For github.com
+	// this is "https://api.github.com", used as-is for both GraphQL
+	// (at /graphql) and REST (at /repos/...).
+	//
+	// For GitHub Enterprise this is the GraphQL base, conventionally
+	// ending in "/api" (GraphQL: <APIURL>/graphql,
+	// REST: <APIURL>/v3/...). The REST path derivation happens
+	// inside restURL — callers pass the GraphQL base.
+	APIURL string
+}
 
 func newRepository(
 	ctx context.Context,
@@ -27,6 +59,7 @@ func newRepository(
 	log *silog.Logger,
 	client *githubv4.Client,
 	repoID githubv4.ID,
+	opt *repositoryOptions,
 ) (*Repository, error) {
 	log = log.With("repo", fmt.Sprintf("%s/%s", owner, repo))
 	if repoID == "" || repoID == nil {
@@ -45,13 +78,19 @@ func newRepository(
 		repoID = q.Repository.ID
 	}
 
+	if opt == nil {
+		opt = &repositoryOptions{}
+	}
+
 	return &Repository{
-		owner:  owner,
-		repo:   repo,
-		log:    log,
-		client: client,
-		repoID: repoID,
-		forge:  forge,
+		owner:      owner,
+		repo:       repo,
+		log:        log,
+		client:     client,
+		repoID:     repoID,
+		httpClient: opt.HTTPClient,
+		apiURL:     opt.APIURL,
+		forge:      forge,
 	}, nil
 }
 

@@ -54,14 +54,14 @@ func newGitHubClient(
 func TestIntegration_Repository(t *testing.T) {
 	rec := newRecorder(t, t.Name())
 	ghc := newGitHubClient(rec.GetDefaultClient())
-	_, err := github.NewRepository(t.Context(), new(github.Forge), "abhinav", "git-spice", silogtest.New(t), ghc, nil)
+	_, err := github.NewRepository(t.Context(), new(github.Forge), "abhinav", "git-spice", silogtest.New(t), ghc, nil, nil)
 	require.NoError(t, err)
 }
 
 func TestIntegration_Repository_NewChangeMetadata(t *testing.T) {
 	rec := newRecorder(t, t.Name())
 	ghc := newGitHubClient(rec.GetDefaultClient())
-	repo, err := github.NewRepository(t.Context(), new(github.Forge), "abhinav", "git-spice", silogtest.New(t), ghc, _gitSpiceRepoID)
+	repo, err := github.NewRepository(t.Context(), new(github.Forge), "abhinav", "git-spice", silogtest.New(t), ghc, _gitSpiceRepoID, nil)
 	require.NoError(t, err)
 
 	t.Run("valid", func(t *testing.T) {
@@ -113,7 +113,7 @@ func TestIntegration(t *testing.T) {
 			ghc := newGitHubClient(httpClient)
 			repo, err := github.NewRepository(
 				t.Context(), &githubForge, "abhinav", "test-repo",
-				silogtest.New(t), ghc, _testRepoID,
+				silogtest.New(t), ghc, _testRepoID, nil,
 			)
 			require.NoError(t, err)
 			return repo
@@ -136,7 +136,7 @@ func TestIntegration_Repository_LabelCreateDelete(t *testing.T) {
 	rec := newRecorder(t, t.Name())
 	ghc := newGitHubClient(rec.GetDefaultClient())
 	repo, err := github.NewRepository(
-		t.Context(), new(github.Forge), "abhinav", "test-repo", silogtest.New(t), ghc, _testRepoID,
+		t.Context(), new(github.Forge), "abhinav", "test-repo", silogtest.New(t), ghc, _testRepoID, nil,
 	)
 	require.NoError(t, err)
 
@@ -175,7 +175,7 @@ func TestIntegration_Repository_notFoundError(t *testing.T) {
 	client := rec.GetDefaultClient()
 	client.Transport = graphqlutil.WrapTransport(client.Transport)
 	ghc := newGitHubClient(client)
-	_, err := github.NewRepository(ctx, new(github.Forge), "abhinav", "does-not-exist-repo", silogtest.New(t), ghc, nil)
+	_, err := github.NewRepository(ctx, new(github.Forge), "abhinav", "does-not-exist-repo", silogtest.New(t), ghc, nil, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, graphqlutil.ErrNotFound)
 

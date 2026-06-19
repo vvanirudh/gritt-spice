@@ -1,0 +1,3 @@
+kind: Added
+body: 'branch submit: Add --copilot flag to request GitHub Copilot Code Review on submit. Idempotent — skips the request if Copilot is already in requested reviewers or has already submitted a review. Works around gs''s GraphQL user-lookup path which rejects bot identities.'
+time: 2026-06-18T23:42:07.185138842-07:00

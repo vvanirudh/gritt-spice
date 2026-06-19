@@ -14,7 +14,7 @@ func TestRepository_ViewerLogin(t *testing.T) {
 	ghc := newGitHubClient(rec.GetDefaultClient())
 	repo, err := github.NewRepository(
 		t.Context(), new(github.Forge), "abhinav", "test-repo",
-		silogtest.New(t), ghc, _testRepoID,
+		silogtest.New(t), ghc, _testRepoID, nil,
 	)
 	require.NoError(t, err)
 

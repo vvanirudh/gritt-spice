@@ -71,6 +71,7 @@ func newTestRepo(t *testing.T, srv *httptest.Server) *Repository {
 		silogtest.New(t),
 		githubv4.NewEnterpriseClient(srv.URL, nil),
 		"repoID",
+		nil,
 	)
 	require.NoError(t, err)
 	return repo

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -107,12 +108,19 @@ func (f *Forge) OpenRepository(ctx context.Context, tok forge.AuthenticationToke
 	rid := mustRepositoryID(id)
 
 	tokenSource := tok.(*AuthenticationToken).tokenSource()
-	ghc, err := newGitHubv4Client(ctx, f.APIURL(), tokenSource)
+	httpClient := oauth2.NewClient(ctx, tokenSource)
+	ghc, err := newGitHubv4ClientFromHTTP(f.APIURL(), httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("create GitHub client: %w", err)
 	}
 
-	return newRepository(ctx, f, rid.owner, rid.name, f.logger(), ghc, nil)
+	return newRepository(
+		ctx, f, rid.owner, rid.name, f.logger(), ghc, nil,
+		&repositoryOptions{
+			HTTPClient: httpClient,
+			APIURL:     f.APIURL(),
+		},
+	)
 }
 
 // RepositoryID is a unique identifier for a GitHub repository.
@@ -143,13 +151,14 @@ func (rid *RepositoryID) ChangeURL(id forge.ChangeID) string {
 	return fmt.Sprintf("%s/%s/%s/pull/%d", rid.url, owner, repo, prNum)
 }
 
-func newGitHubv4Client(ctx context.Context, apiURL string, tokenSource oauth2.TokenSource) (*githubv4.Client, error) {
+// newGitHubv4ClientFromHTTP constructs a GraphQL client targeting the
+// given REST API URL's /graphql endpoint, reusing the provided HTTP
+// client (which must already be authenticated).
+func newGitHubv4ClientFromHTTP(apiURL string, httpClient *http.Client) (*githubv4.Client, error) {
 	graphQLAPIURL, err := url.JoinPath(apiURL, "/graphql")
 	if err != nil {
 		return nil, fmt.Errorf("build GraphQL API URL: %w", err)
 	}
-
-	httpClient := oauth2.NewClient(ctx, tokenSource)
 	return newGitHubEnterpriseClient(graphQLAPIURL, httpClient), nil
 }
 
