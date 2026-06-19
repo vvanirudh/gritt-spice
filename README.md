@@ -148,20 +148,6 @@ alone (touches disjoint files), open each PR independently against
 when later commits genuinely depend on earlier ones for their tests
 or symbols.
 
-### Requesting Copilot review on submit
-
-GitHub's "Copilot Code Review" feature treats `Copilot` as a
-requestable reviewer. To request it via gs, pass the bot login
-through the existing `--reviewer` flag:
-
-```bash
-gs branch submit --reviewer copilot-pull-request-reviewer
-```
-
-Combine with human reviewers as usual:
-`--reviewer copilot-pull-request-reviewer --reviewer alice`. The
-repo must have Copilot Code Review enabled at the org / repo level.
-
 ## Documentation
 
 See <https://abhinav.github.io/git-spice/> for the full upstream
