@@ -132,6 +132,7 @@ func TestListChangeComments(t *testing.T) {
 				silogtest.New(t),
 				githubv4.NewEnterpriseClient(srv.URL, nil),
 				"repoID",
+				nil,
 			)
 			require.NoError(t, err)
 

@@ -150,17 +150,23 @@ or symbols.
 
 ### Requesting Copilot review on submit
 
-GitHub's "Copilot Code Review" feature treats `Copilot` as a
-requestable reviewer. To request it via gs, pass the bot login
-through the existing `--reviewer` flag:
+GitHub's Copilot Code Review can be requested on submit using the
+`--copilot` flag:
 
 ```bash
-gs branch submit --reviewer copilot-pull-request-reviewer
+gs branch submit --copilot
 ```
 
-Combine with human reviewers as usual:
-`--reviewer copilot-pull-request-reviewer --reviewer alice`. The
-repo must have Copilot Code Review enabled at the org / repo level.
+The request is idempotent: repeated submits will not trigger
+duplicate reviews. If Copilot is already in the PR's requested
+reviewers, or has already submitted a review, `--copilot` is a no-op
+for that submission. The flag can be combined with `--reviewer` for
+human reviewers; e.g. `gs branch submit --copilot --reviewer alice`.
+
+The repo must have Copilot Code Review enabled at the org / repo
+level. Note: this flag uses GitHub's REST API directly because
+Copilot is a Bot identity and gs's GraphQL `user(login:...)` lookup
+(used by `--reviewer`) rejects bot identities with `NOT_FOUND`.
 
 ## Documentation
 

@@ -167,6 +167,11 @@ type Options struct {
 	Reviewers           []string `short:"r" name:"reviewer" help:"Add reviewers to the change request. Pass multiple times or separate with commas." released:"v0.21.0"`
 	ConfiguredReviewers []string `name:"configured-reviewers" help:"Default reviewers to add to change requests." hidden:"" config:"submit.reviewers" released:"v0.21.0"` // merged with Reviewers
 
+	// Copilot requests GitHub Copilot Code Review on the change.
+	// The request is idempotent: if Copilot is already in the change's
+	// requested reviewers or has submitted a review, it is a no-op.
+	Copilot bool `name:"copilot" config:"submit.copilot" help:"Request GitHub Copilot Code Review on the change request. Idempotent."`
+
 	Assignees           []string `short:"a" name:"assign" placeholder:"ASSIGNEE" help:"Assign the change request to these users. Pass multiple times or separate with commas." released:"v0.21.0"`
 	ConfiguredAssignees []string `name:"configured-assignees" help:"Default assignees to add to change requests." hidden:"" config:"submit.assignees" released:"v0.21.0"` // merged with Assignees
 
@@ -822,6 +827,10 @@ func (h *Handler) submitBranch(
 
 			upsert.ChangeForge = changeMeta.ForgeID()
 			upsert.ChangeMetadata = changeIDJSON
+
+			if opts.Copilot {
+				requestCopilotReview(ctx, log, remoteRepo, changeID)
+			}
 		} else {
 			// no-publish mode, so no CR was created.
 			log.Infof("Pushed %s", branchToSubmit)
@@ -996,10 +1005,56 @@ func (h *Handler) submitBranch(
 			}
 		}
 
+		if opts.Copilot {
+			remoteRepo, err := h.RemoteRepository(ctx)
+			if err != nil {
+				log.Warn("Could not load remote repository for Copilot request",
+					"error", err)
+			} else {
+				requestCopilotReview(ctx, log, remoteRepo, pull.ID)
+			}
+		}
+
 		log.Infof("Updated %v: %s", pull.ID, pull.URL)
 	}
 
 	return status, nil
+}
+
+// requestCopilotReview asks the forge to add Copilot as a reviewer
+// on the given change, if the forge supports the
+// [forge.CopilotReviewerRequester] capability. Failures are logged
+// as warnings and do not abort the surrounding submit.
+func requestCopilotReview(
+	ctx context.Context,
+	log *silog.Logger,
+	remoteRepo forge.Repository,
+	changeID forge.ChangeID,
+) {
+	requester, ok := remoteRepo.(forge.CopilotReviewerRequester)
+	if !ok {
+		log.Warn(
+			"forge does not support Copilot Code Review requests; " +
+				"skipping --copilot",
+		)
+		return
+	}
+
+	requested, err := requester.RequestCopilotReview(ctx, changeID)
+	if err != nil {
+		log.Warn("Could not request Copilot review",
+			"change", changeID,
+			"error", err)
+		return
+	}
+	if requested {
+		log.Infof("%v: Requested Copilot Code Review", changeID)
+	} else {
+		log.Debugf(
+			"%v: Copilot already requested or has reviewed; skipping",
+			changeID,
+		)
+	}
 }
 
 func isNonFastForwardPushError(err error) bool {
